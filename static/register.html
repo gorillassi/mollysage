@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Регистрация — Secure Social</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --bg-elevated: rgba(15, 23, 42, 0.9);
+      --border-subtle: rgba(148, 163, 184, 0.25);
+      --accent: #3b82f6;
+      --accent-soft: rgba(59, 130, 246, 0.16);
+      --accent-strong: #2563eb;
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --danger: #f97373;
+      --success: #4ade80;
+      --radius-lg: 18px;
+      --radius-xl: 24px;
+      --blur: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at 0% 0%, rgba(59,130,246,0.25), transparent 60%),
+        radial-gradient(circle at 100% 100%, rgba(45,212,191,0.13), transparent 55%),
+        var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .shell {
+      display: flex;
+      gap: 40px;
+      max-width: 900px;
+      width: 100%;
+      align-items: stretch;
+    }
+
+    .panel {
+      flex: 1.1;
+      background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(15,23,42,0.88));
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-subtle);
+      box-shadow:
+        0 24px 60px rgba(15,23,42,0.8),
+        0 0 0 1px rgba(15,23,42,0.9);
+      padding: 28px 30px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 0 0, rgba(59,130,246,0.18), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(52,211,153,0.15), transparent 55%);
+      opacity: 0.75;
+      mix-blend-mode: lighten;
+    }
+
+    .panel-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px 4px 6px;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.9);
+      border: 1px solid rgba(148,163,184,0.4);
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+
+    .dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 20%, #bbf7d0, #22c55e);
+      box-shadow: 0 0 0 4px rgba(34,197,94,0.18);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      margin: 0 0 22px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    input {
+      width: 100%;
+      padding: 9px 11px;
+      border-radius: 10px;
+      border: 1px solid rgba(55,65,81,0.9);
+      background: rgba(15,23,42,0.85);
+      color: var(--text-main);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    input::placeholder {
+      color: rgba(148,163,184,0.65);
+    }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow:
+        0 0 0 1px rgba(59,130,246,0.6),
+        0 0 18px rgba(37,99,235,0.35);
+      background: rgba(15,23,42,0.95);
+    }
+
+    button {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow:
+        0 10px 30px rgba(37,99,235,0.65),
+        0 0 0 1px rgba(15,23,42, 0.9);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+      box-shadow:
+        0 14px 38px rgba(37,99,235,0.85),
+        0 0 0 1px rgba(15,23,42,0.9);
+    }
+
+    button:active {
+      transform: translateY(0);
+      box-shadow:
+        0 6px 18px rgba(15,23,42,0.8),
+        0 0 0 1px rgba(15,23,42,0.9);
+    }
+
+    .muted {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .muted a {
+      color: #93c5fd;
+      text-decoration: none;
+    }
+
+    .muted a:hover {
+      text-decoration: underline;
+    }
+
+    .status {
+      margin-top: 16px;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: 10px 11px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: rgba(15,23,42,0.85);
+      max-height: 150px;
+      overflow: auto;
+    }
+    .status.hidden { display: none; }
+    .status.error {
+      border-color: rgba(248,113,113,0.6);
+      color: var(--danger);
+    }
+    .status.ok {
+      border-color: rgba(74,222,128,0.6);
+      color: var(--success);
+    }
+
+    .side {
+      flex: 0.9;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 4px 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .side-card {
+      flex: 1;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(148,163,184,0.25);
+      background: radial-gradient(circle at 0 0, rgba(59,130,246,0.16), transparent 55%),
+                  radial-gradient(circle at 100% 100%, rgba(52,211,153,0.15), transparent 55%),
+                  rgba(15,23,42,0.92);
+      padding: 14px 14px 12px;
+      backdrop-filter: blur(14px);
+    }
+
+    .side-title {
+      font-size: 13px;
+      color: var(--text-main);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.9);
+      border: 1px solid rgba(148,163,184,0.5);
+      font-size: 11px;
+    }
+
+    ul {
+      margin: 6px 0 0 14px;
+      padding: 0;
+    }
+
+    li { margin-bottom: 4px; }
+
+    @media (max-width: 780px) {
+      .shell {
+        flex-direction: column;
+        max-width: 480px;
+      }
+      .side { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="panel">
+      <div class="panel-inner">
+        <div class="badge">
+          <span class="dot"></span>
+          End-to-End ключи на устройстве
+        </div>
+        <h1>Создать аккаунт</h1>
+        <p class="subtitle">
+          Локальная генерация ключей, шифрование приватного ключа от пароля. Сервер никогда не видит ваш секрет.
+        </p>
+
+        <form id="regForm" autocomplete="off">
+          <div class="field">
+            <label>
+              <span>Логин</span>
+              <span>будет виден другим</span>
+            </label>
+            <input id="username" name="username" placeholder="например, alice" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label>
+              <span>Пароль</span>
+              <span>используется только для шифрования ключа</span>
+            </label>
+            <input id="password" name="password" type="password" placeholder="придумайте сильный пароль" autocomplete="new-password" required>
+          </div>
+          <button type="submit">
+            <span>Зарегистрироваться</span>
+          </button>
+        </form>
+
+        <p class="muted">
+          Уже есть аккаунт? <a href="/login.html">Войти</a>
+        </p>
+
+        <div id="status" class="status hidden"></div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="side-card">
+        <div class="side-title">
+          <span>Как это работает</span>
+          <span class="pill">Argon2 • X25519 • AES-GCM</span>
+        </div>
+        <ul>
+          <li>На сервер отправляется только хэш пароля + публичный ключ.</li>
+          <li>Приватный ключ шифруется с ключа, полученного из пароля через Argon2id.</li>
+          <li>Даже при компрометации базы данных приватный ключ остаётся недоступен без пароля.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+<script>
+const form = document.getElementById('regForm');
+const statusEl = document.getElementById('status');
+
+function showStatus(text, type) {
+  statusEl.textContent = text;
+  statusEl.className = 'status ' + (type || '');
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  showStatus('', 'hidden');
+
+  const username = form.username.value.trim();
+  const password = form.password.value;
+
+  if (!username || !password) {
+    showStatus('Укажи логин и пароль', 'error');
+    return;
+  }
+
+  try {
+    showStatus('Создаём аккаунт…', 'ok');
+    const resp = await fetch('/register', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username, password })
+    });
+
+    const text = await resp.text();
+    let data;
+    try { data = JSON.parse(text); } catch (_) {}
+
+    if (!resp.ok) {
+      showStatus('Ошибка: ' + (text || resp.status), 'error');
+      return;
+    }
+
+    showStatus(
+      'Аккаунт создан\n\n' +
+      'ID: ' + data.id + '\n' +
+      'Логин: ' + data.username + '\n\n' +
+      'Публичный ключ (base64):\n' + data.public_key_base64,
+      'ok'
+    );
+
+    try {
+      localStorage.setItem('ss_username', username);
+    } catch (_) {}
+  } catch (err) {
+    showStatus('Сеть/сервер недоступен: ' + err, 'error');
+  }
+});
+</script>
+</body>
+</html>
