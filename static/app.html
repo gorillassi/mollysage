@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Чаты · MollySage</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --panel: #111827;
+      --panel-soft: #0b1120;
+      --border: #1f2937;
+      --border-soft: rgba(148,163,184,0.35);
+      --accent: #3b82f6;
+      --accent-strong: #2563eb;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --danger: #f97373;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 0 0, rgba(59,130,246,0.2), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(45,212,191,0.18), transparent 55%),
+        var(--bg);
+      display: flex;
+    }
+
+    .sidebar {
+      width: 300px;
+      background: linear-gradient(160deg, #020617, #020617 40%, #020617 100%);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 14px 14px 10px;
+      gap: 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-mark {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      background: conic-gradient(from 210deg, #22c55e, #3b82f6, #a855f7, #22c55e);
+      position: relative;
+      overflow: hidden;
+    }
+    .logo-mark::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      border-radius: inherit;
+      background: radial-gradient(circle at 30% 20%, rgba(248,250,252,0.95), rgba(15,23,42,0.98));
+    }
+
+    .logo-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .chip {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: #020617;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .section-title {
+      margin: 4px 2px 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.11em;
+      color: rgba(156,163,175,0.9);
+    }
+
+    .field {
+      margin-bottom: 8px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+
+    input {
+      width: 100%;
+      padding: 7px 9px;
+      border-radius: 9px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+    input::placeholder {
+      color: rgba(148,163,184,0.7);
+    }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow:
+        0 0 0 1px rgba(59,130,246,0.7),
+        0 0 14px rgba(37,99,235,0.35);
+      background: #020617;
+    }
+
+    .btn-main {
+      width: 100%;
+      margin-top: 2px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow:
+        0 10px 24px rgba(37,99,235,0.85),
+        0 0 0 1px #020617;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+    }
+    .btn-main:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.04);
+    }
+    .btn-main:active {
+      transform: translateY(0);
+      box-shadow:
+        0 6px 18px rgba(15,23,42,0.9),
+        0 0 0 1px #020617;
+    }
+
+    .status {
+      font-size: 11px;
+      min-height: 16px;
+      margin-top: 4px;
+      color: var(--muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status.error { color: var(--danger); }
+    .status.ok { color: #a7f3d0; }
+
+    .chat-list {
+      flex: 1;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #020617;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2px 4px 4px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    #chatList {
+      margin-top: 2px;
+      overflow-y: auto;
+      padding: 2px 0;
+    }
+
+    .chat-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-radius: 999px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid transparent;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+    }
+
+    .chat-item:hover {
+      background: #020617;
+      border-color: #1f2937;
+      color: var(--text);
+    }
+
+    .chat-item.active {
+      background:
+        radial-gradient(circle at 0 0, rgba(59,130,246,0.32), transparent 60%),
+        #020617;
+      border-color: rgba(59,130,246,0.75);
+      color: var(--text);
+      box-shadow: 0 6px 18px rgba(15,23,42,0.9);
+      transform: translateY(-1px);
+    }
+
+    .chat-item-name {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chat-item-pill {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #020617;
+      border: 1px solid rgba(148,163,184,0.6);
+    }
+    
+    .unread-badge {
+      margin-left: 4px;
+      min-width: 16px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #ef4444;
+      color: #f9fafb;
+      font-size: 10px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .sidebar-foot {
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .header {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, #020617, #020617 60%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    #chatTitle {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    #chatSubtitle {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    #idsInfo {
+      font-size: 11px;
+      color: rgba(156,163,175,0.95);
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.4);
+      background: #020617;
+    }
+
+    .messages {
+      flex: 1;
+      padding: 14px 18px;
+      overflow-y: auto;
+      background:
+        radial-gradient(circle at 20% 0, rgba(59,130,246,0.18), transparent 60%),
+        radial-gradient(circle at 100% 80%, rgba(34,197,94,0.16), transparent 65%),
+        #020617;
+    }
+
+    .msg {
+      max-width: 72%;
+      padding: 8px 10px;
+      border-radius: 12px;
+      margin-bottom: 7px;
+      font-size: 13px;
+      line-height: 1.35;
+      word-break: break-word;
+      position: relative;
+    }
+
+    .msg.self {
+      margin-left: auto;
+      background:
+        radial-gradient(circle at 0 0, rgba(191,219,254,0.35), transparent 60%),
+        rgba(37,99,235,0.95);
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 8px 20px rgba(15,23,42,0.7);
+    }
+
+    .msg.peer {
+      background:
+        radial-gradient(circle at 100% 0, rgba(34,197,94,0.28), transparent 65%),
+        rgba(15,23,42,0.96);
+      border-bottom-left-radius: 4px;
+      border: 1px solid rgba(148,163,184,0.35);
+    }
+
+    .msg-meta {
+      font-size: 10px;
+      color: rgba(209,213,219,0.9);
+      margin-bottom: 2px;
+      opacity: 0.9;
+    }
+
+    .msg.peer .msg-meta {
+      color: rgba(148,163,184,0.95);
+    }
+
+    .input-area {
+      display: flex;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, #020617, #020617);
+      gap: 8px;
+    }
+
+    .input-area textarea {
+      flex: 1;
+      resize: none;
+      min-height: 40px;
+      max-height: 96px;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 10px;
+      border-radius: 11px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .input-area textarea:focus {
+      border-color: var(--accent);
+      box-shadow:
+        0 0 0 1px rgba(59,130,246,0.7),
+        0 0 14px rgba(37,99,235,0.4);
+      background: #020617;
+    }
+
+    .input-area button {
+      width: 110px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow:
+        0 10px 24px rgba(37,99,235,0.8),
+        0 0 0 1px #020617;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+    }
+
+    .input-area button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.04);
+    }
+
+    .input-area button:active {
+      transform: translateY(0);
+      box-shadow:
+        0 6px 18px rgba(15,23,42,0.9),
+        0 0 0 1px #020617;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="brand">
+      <div class="logo">
+        <div class="logo-mark"></div>
+        <div>
+          <div class="logo-title">MollySage</div>
+          <div class="logo-sub">защищённые чаты</div>
+        </div>
+      </div>
+      <div class="chip">alpha</div>
+    </div>
+
+    <div class="section-title">Профиль</div>
+    <div class="field">
+      <label for="selfUser">Твой логин</label>
+      <input id="selfUser" disabled>
+    </div>
+
+    <div class="section-title">Новый диалог</div>
+    <div class="field">
+      <label for="directNameInput">Личный чат (логин)</label>
+      <input id="directNameInput" placeholder="bob">
+    </div>
+    <button class="btn-main" id="openDirectBtn">Открыть личный чат</button>
+
+    <div class="section-title">Новая беседа</div>
+    <div class="field">
+      <label for="groupNameInput">Название группы</label>
+      <input id="groupNameInput" placeholder="MIPT 303а">
+    </div>
+    <button class="btn-main" id="createGroupBtn">Создать беседу</button>
+
+    <div class="section-title">Диалоги и беседы</div>
+    <div class="chat-list">
+      <div class="chat-list-header">
+        <span>Чаты</span>
+        <span style="font-size:10px;color:var(--muted);">кликни, чтобы открыть</span>
+      </div>
+      <div id="chatList"></div>
+    </div>
+
+    <div class="sidebar-foot">
+      <div>Личные чаты используют plain-API, беседы – `/groups/*`.</div>
+      <div>Крипто-ядро и E2E реализованы на стороне Go-клиента.</div>
+      <div id="sideStatus" class="status"></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="header">
+      <div class="header-main">
+        <div id="chatTitle">Чат не выбран</div>
+        <div id="chatSubtitle">Создай диалог или беседу слева, затем выбери чат</div>
+      </div>
+      <div id="idsInfo"></div>
+    </div>
+    <div id="messages" class="messages"></div>
+    <div class="input-area">
+      <textarea id="msgInput" placeholder="Напиши сообщение…" disabled></textarea>
+      <button id="sendBtn" disabled>Отправить</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

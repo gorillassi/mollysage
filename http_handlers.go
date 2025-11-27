@@ -14,14 +14,21 @@ type Server struct {
 	users         *UserStore
 	messages      *MessageStore
 	plainMessages *PlainMessageStore
+	groups        *GroupStore
+	groupMembers  *GroupMemberStore
+	groupMessages *GroupMessageStore
 	crypto        CryptoConfig
 }
+
 
 func NewServer(db *sql.DB) *Server {
 	return &Server{
 		users:         NewUserStore(),
 		messages:      NewMessageStore(db),
 		plainMessages: NewPlainMessageStore(db),
+		groups:        NewGroupStore(db),
+		groupMembers:  NewGroupMemberStore(db),
+		groupMessages: NewGroupMessageStore(db),
 		crypto:        defaultCryptoConfig,
 	}
 }
@@ -415,6 +422,262 @@ func (s *Server) handleChatMessages(w http.ResponseWriter, r *http.Request) {
 			ToUserID:   m.ToUserID,
 			Text:       m.Text,
 			CreatedAt:  m.CreatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ====== Group chats (беседы) ======
+
+type CreateGroupRequest struct {
+	Name      string  `json:"name"`
+	OwnerID   int64   `json:"owner_id"`
+	MemberIDs []int64 `json:"member_ids"`
+}
+
+type CreateGroupResponse struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	OwnerID   int64  `json:"owner_id"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
+func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req CreateGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" || req.OwnerID == 0 {
+		http.Error(w, "name and owner_id required", http.StatusBadRequest)
+		return
+	}
+
+	// владелец должен существовать
+	if _, err := s.users.GetByID(req.OwnerID); err != nil {
+		http.Error(w, "owner not found", http.StatusBadRequest)
+		return
+	}
+
+	g, err := s.groups.Create(req.Name, req.OwnerID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// добавляем владельца и остальных участников
+	_ = s.groupMembers.AddMember(g.ID, req.OwnerID)
+	for _, uid := range req.MemberIDs {
+		if uid == 0 {
+			continue
+		}
+		// опционально можно проверить, что юзер существует
+		_ = s.groupMembers.AddMember(g.ID, uid)
+	}
+
+	resp := CreateGroupResponse{
+		ID:      g.ID,
+		Name:    g.Name,
+		OwnerID: g.OwnerUserID,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+type AddGroupMemberRequest struct {
+	GroupID int64 `json:"group_id"`
+	UserID  int64 `json:"user_id"`
+}
+
+func (s *Server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req AddGroupMemberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	if req.GroupID == 0 || req.UserID == 0 {
+		http.Error(w, "group_id and user_id required", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := s.groups.GetByID(req.GroupID); err != nil {
+		http.Error(w, "group not found", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.users.GetByID(req.UserID); err != nil {
+		http.Error(w, "user not found", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.groupMembers.AddMember(req.GroupID, req.UserID); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type GroupSendRequest struct {
+	GroupID    int64  `json:"group_id"`
+	FromUserID int64  `json:"from_user_id"`
+	Text       string `json:"text"`
+}
+
+type GroupSendResponse struct {
+	ID int64 `json:"id"`
+}
+
+func (s *Server) handleGroupSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req GroupSendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	if req.GroupID == 0 || req.FromUserID == 0 || strings.TrimSpace(req.Text) == "" {
+		http.Error(w, "missing fields", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := s.groups.GetByID(req.GroupID); err != nil {
+		http.Error(w, "group not found", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := s.users.GetByID(req.FromUserID); err != nil {
+		http.Error(w, "user not found", http.StatusBadRequest)
+		return
+	}
+
+	isMember, err := s.groupMembers.IsMember(req.GroupID, req.FromUserID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !isMember {
+		http.Error(w, "forbidden: not a group member", http.StatusForbidden)
+		return
+	}
+
+	msg := &GroupMessage{
+		GroupID:    req.GroupID,
+		FromUserID: req.FromUserID,
+		Text:       req.Text,
+	}
+	created, err := s.groupMessages.Create(msg)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := GroupSendResponse{ID: created.ID}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+type GroupMessageDTO struct {
+	ID         int64  `json:"id"`
+	GroupID    int64  `json:"group_id"`
+	FromUserID int64  `json:"from_user_id"`
+	Text       string `json:"text"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func (s *Server) handleGroupMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	q := r.URL.Query()
+	gidStr := strings.TrimSpace(q.Get("group_id"))
+	if gidStr == "" {
+		http.Error(w, "group_id required", http.StatusBadRequest)
+		return
+	}
+
+	var gid int64
+	if _, err := fmt.Sscan(gidStr, &gid); err != nil || gid <= 0 {
+		http.Error(w, "bad group_id", http.StatusBadRequest)
+		return
+	}
+
+	// просто возвращаем все сообщения; фильтрация по членству — на фронте или можно добавить параметр user_id
+	msgs, err := s.groupMessages.List(gid)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	out := make([]GroupMessageDTO, 0, len(msgs))
+	for _, m := range msgs {
+		out = append(out, GroupMessageDTO{
+			ID:         m.ID,
+			GroupID:    m.GroupID,
+			FromUserID: m.FromUserID,
+			Text:       m.Text,
+			CreatedAt:  m.CreatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+type GroupDTO struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	OwnerID   int64  `json:"owner_id"`
+	CreatedAt string `json:"created_at"`
+}
+
+func (s *Server) handleGroupsByUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	uidStr := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	if uidStr == "" {
+		http.Error(w, "user_id required", http.StatusBadRequest)
+		return
+	}
+	var uid int64
+	if _, err := fmt.Sscan(uidStr, &uid); err != nil || uid <= 0 {
+		http.Error(w, "bad user_id", http.StatusBadRequest)
+		return
+	}
+
+	groups, err := s.groups.ListByUser(uid)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	out := make([]GroupDTO, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, GroupDTO{
+			ID:        g.ID,
+			Name:      g.Name,
+			OwnerID:   g.OwnerUserID,
+			CreatedAt: g.CreatedAt,
 		})
 	}
 

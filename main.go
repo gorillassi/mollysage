@@ -31,6 +31,27 @@ CREATE TABLE IF NOT EXISTS plain_messages (
     text         TEXT NOT NULL,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    owner_user_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id INTEGER NOT NULL,
+    user_id  INTEGER NOT NULL,
+    PRIMARY KEY (group_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS group_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL,
+    from_user_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 `
 
 	if _, err := db.Exec(schema); err != nil {
@@ -57,6 +78,13 @@ func main() {
 
 	http.HandleFunc("/chat/send", s.handleChatSend)
 	http.HandleFunc("/chat/messages", s.handleChatMessages)
+
+	http.HandleFunc("/groups/create", s.handleCreateGroup)
+	http.HandleFunc("/groups/add_member", s.handleAddGroupMember)
+	http.HandleFunc("/groups/send", s.handleGroupSend)
+	http.HandleFunc("/groups/messages", s.handleGroupMessages)
+	http.HandleFunc("/groups/by_user", s.handleGroupsByUser)
+
 
 	// Статика: / -> отдать файлы из папки static
 	fs := http.FileServer(http.Dir("static"))

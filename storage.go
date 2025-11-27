@@ -195,3 +195,169 @@ func (s *PlainMessageStore) ListBetween(userA, userB int64) ([]*PlainMessage, er
 	}
 	return res, nil
 }
+
+// ===== Groups (беседы) =====
+
+type Group struct {
+	ID          int64
+	Name        string
+	OwnerUserID int64
+	CreatedAt   string
+}
+
+type GroupStore struct {
+	db *sql.DB
+}
+
+func NewGroupStore(db *sql.DB) *GroupStore {
+	return &GroupStore{db: db}
+}
+
+func (s *GroupStore) Create(name string, ownerID int64) (*Group, error) {
+	res, err := s.db.Exec(
+		`INSERT INTO groups (name, owner_user_id) VALUES (?, ?)`,
+		name, ownerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return &Group{
+		ID:          id,
+		Name:        name,
+		OwnerUserID: ownerID,
+	}, nil
+}
+
+func (s *GroupStore) GetByID(id int64) (*Group, error) {
+	row := s.db.QueryRow(
+		`SELECT id, name, owner_user_id, created_at FROM groups WHERE id = ?`,
+		id,
+	)
+	var g Group
+	if err := row.Scan(&g.ID, &g.Name, &g.OwnerUserID, &g.CreatedAt); err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+// Все группы, где user_id состоит в group_members
+func (s *GroupStore) ListByUser(userID int64) ([]*Group, error) {
+	rows, err := s.db.Query(
+		`SELECT g.id, g.name, g.owner_user_id, g.created_at
+         FROM groups g
+         JOIN group_members gm ON gm.group_id = g.id
+         WHERE gm.user_id = ?
+         ORDER BY g.id`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var res []*Group
+	for rows.Next() {
+		var g Group
+		if err := rows.Scan(&g.ID, &g.Name, &g.OwnerUserID, &g.CreatedAt); err != nil {
+			continue
+		}
+		res = append(res, &g)
+	}
+	return res, nil
+}
+
+// ===== Участники бесед =====
+
+type GroupMemberStore struct {
+	db *sql.DB
+}
+
+func NewGroupMemberStore(db *sql.DB) *GroupMemberStore {
+	return &GroupMemberStore{db: db}
+}
+
+func (s *GroupMemberStore) AddMember(groupID, userID int64) error {
+	_, err := s.db.Exec(
+		`INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)`,
+		groupID, userID,
+	)
+	return err
+}
+
+func (s *GroupMemberStore) IsMember(groupID, userID int64) (bool, error) {
+	row := s.db.QueryRow(
+		`SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?`,
+		groupID, userID,
+	)
+	var dummy int
+	err := row.Scan(&dummy)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// ===== Сообщения в беседах =====
+
+type GroupMessage struct {
+	ID         int64
+	GroupID    int64
+	FromUserID int64
+	Text       string
+	CreatedAt  string
+}
+
+type GroupMessageStore struct {
+	db *sql.DB
+}
+
+func NewGroupMessageStore(db *sql.DB) *GroupMessageStore {
+	return &GroupMessageStore{db: db}
+}
+
+func (s *GroupMessageStore) Create(m *GroupMessage) (*GroupMessage, error) {
+	res, err := s.db.Exec(
+		`INSERT INTO group_messages (group_id, from_user_id, text) VALUES (?, ?, ?)`,
+		m.GroupID, m.FromUserID, m.Text,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	m.ID = id
+	return m, nil
+}
+
+func (s *GroupMessageStore) List(groupID int64) ([]*GroupMessage, error) {
+	rows, err := s.db.Query(
+		`SELECT id, group_id, from_user_id, text, created_at
+         FROM group_messages
+         WHERE group_id = ?
+         ORDER BY id`,
+		groupID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var res []*GroupMessage
+	for rows.Next() {
+		var m GroupMessage
+		if err := rows.Scan(&m.ID, &m.GroupID, &m.FromUserID, &m.Text, &m.CreatedAt); err != nil {
+			continue
+		}
+		res = append(res, &m)
+	}
+	return res, nil
+}
