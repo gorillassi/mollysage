@@ -15,7 +15,6 @@
       --accent: #3b82f6;
       --accent-strong: #2563eb;
       --danger: #f97373;
-      --ok: #86efac;
     }
 
     * { box-sizing: border-box; }
@@ -47,7 +46,6 @@
       display: flex;
       flex-direction: column;
       min-width: 320px;
-      min-height: 0;
     }
 
     .side .top {
@@ -60,11 +58,8 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 10px;
-      justify-content: space-between;
+      margin-bottom: 12px;
     }
-
-    .brand-left { display:flex; gap:10px; align-items:center; min-width:0; }
 
     .logo {
       width: 34px;
@@ -77,7 +72,6 @@
       justify-content: center;
       font-weight: 900;
       letter-spacing: 0.5px;
-      flex: 0 0 auto;
     }
 
     .brand h1 {
@@ -85,9 +79,6 @@
       margin: 0;
       line-height: 1.1;
       font-weight: 800;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
     .brand p {
@@ -96,28 +87,36 @@
       color: var(--muted);
     }
 
-    .who {
-      text-align: right;
-      font-size: 12px;
-      color: rgba(229,231,235,0.8);
-      white-space: nowrap;
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
-    .who strong { color: rgba(229,231,235,0.95); }
-    .who a {
-      color: rgba(147,197,253,0.95);
-      text-decoration: none;
+
+    .row button {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(2, 6, 23, 0.55);
+      color: var(--text);
+      cursor: pointer;
       font-weight: 700;
-      margin-left: 10px;
+      transition: transform 0.1s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
-    .who a:hover { text-decoration: underline; }
+
+    .row button:hover {
+      border-color: rgba(59,130,246,0.55);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.25);
+      transform: translateY(-1px);
+    }
 
     .status {
-      margin-top: 8px;
+      margin-top: 10px;
       font-size: 12px;
       color: var(--muted);
       min-height: 18px;
     }
-    .status.ok { color: var(--ok); }
+    .status.ok { color: #86efac; }
     .status.error { color: var(--danger); }
 
     .side .actions {
@@ -146,33 +145,10 @@
       box-shadow: 0 12px 22px rgba(37,99,235,0.35);
     }
 
-    .section {
-      padding: 10px 14px 8px;
-      font-size: 12px;
-      color: rgba(229,231,235,0.82);
-      display:flex;
-      align-items:center;
-      justify-content: space-between;
-      gap: 8px;
-      border-bottom: 1px solid rgba(148,163,184,0.12);
-      background: rgba(2,6,23,0.12);
-    }
-    .section .pill {
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.18);
-      background: rgba(2,6,23,0.45);
-      color: rgba(229,231,235,0.78);
-      font-weight: 800;
-      font-size: 11px;
-      cursor: pointer;
-    }
-
     .chat-list {
       flex: 1;
       overflow: auto;
       padding: 8px;
-      min-height: 0;
     }
 
     .chat-item {
@@ -209,10 +185,13 @@
       justify-content: center;
       font-weight: 900;
       color: rgba(229,231,235,0.85);
-      flex: 0 0 auto;
     }
 
-    .chat-text { flex: 1; min-width: 0; }
+    .chat-text {
+      flex: 1;
+      min-width: 0;
+    }
+
     .chat-title {
       font-weight: 900;
       font-size: 13px;
@@ -220,6 +199,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
     .chat-sub {
       margin-top: 2px;
       font-size: 12px;
@@ -242,7 +222,6 @@
       font-weight: 900;
       padding: 0 8px;
       box-shadow: 0 10px 18px rgba(37,99,235,0.35);
-      flex: 0 0 auto;
     }
 
     .main {
@@ -254,7 +233,6 @@
       display: flex;
       flex-direction: column;
       min-width: 0;
-      min-height: 0;
     }
 
     .header {
@@ -267,7 +245,9 @@
       justify-content: space-between;
     }
 
-    .header-main { min-width: 0; }
+    .header-main {
+      min-width: 0;
+    }
 
     #chatTitle {
       font-weight: 900;
@@ -294,6 +274,9 @@
       border: 1px solid rgba(148, 163, 184, 0.18);
       background: rgba(2,6,23,0.45);
       white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .messages {
@@ -302,7 +285,6 @@
       padding: 14px 14px 2px;
       background: linear-gradient(180deg, #020617, #020617);
       gap: 8px;
-      min-height: 0;
     }
 
     .msg {
@@ -325,7 +307,7 @@
       font-size: 11px;
       color: rgba(229,231,235,0.72);
       margin-bottom: 6px;
-      font-weight: 800;
+      font-weight: 700;
     }
 
     .msg > div:last-child {
@@ -337,7 +319,7 @@
     }
 
     .msg-img {
-      max-width: min(420px, 70vw);
+      max-width: min(380px, 70vw);
       border-radius: 14px;
       display: block;
       box-shadow: 0 10px 24px rgba(0,0,0,0.35);
@@ -384,7 +366,7 @@
       background: linear-gradient(135deg, var(--accent), var(--accent-strong));
       color: white;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 600;
       cursor: pointer;
       box-shadow:
         0 10px 24px rgba(37,99,235,0.8),
@@ -399,7 +381,9 @@
       box-shadow: none;
     }
 
-    .input-area button:hover:enabled { transform: translateY(-1px); }
+    .input-area button:hover:enabled {
+      transform: translateY(-1px);
+    }
 
     .input-area .attach-btn {
       width: 44px;
@@ -420,6 +404,10 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(59,130,246,0.35);
       transform: translateY(-1px);
+    }
+
+    .input-area .send-btn {
+      width: 110px;
     }
 
     @media (max-width: 980px) {
@@ -443,17 +431,16 @@
     <div class="side">
       <div class="top">
         <div class="brand">
-          <div class="brand-left">
-            <div class="logo">M</div>
-            <div style="min-width:0">
-              <h1>Mollysage</h1>
-              <p>Secure Social · demo</p>
-            </div>
+          <div class="logo">M</div>
+          <div>
+            <h1>Mollysage</h1>
+            <p id="meLine">Secure Social</p>
           </div>
-          <div class="who">
-            <div>Вы: <strong id="whoUser">—</strong></div>
-            <a id="logoutLink" href="#">Выйти</a>
-          </div>
+        </div>
+
+        <div class="row" style="justify-content: space-between;">
+          <button id="logoutBtn" title="Выйти">Выйти</button>
+          <button id="refreshBtn" title="Обновить">Обновить</button>
         </div>
 
         <div id="sideStatus" class="status"></div>
@@ -464,16 +451,6 @@
         <button id="createGroupBtn">Беседа</button>
       </div>
 
-      <div class="section">
-        <span>Онлайн</span>
-        <button id="onlineRefreshBtn" class="pill" type="button">Обновить</button>
-      </div>
-      <div id="onlineList" class="chat-list" style="max-height: 230px;"></div>
-
-      <div class="section">
-        <span>Чаты</span>
-        <button id="chatsRefreshBtn" class="pill" type="button">Синхр</button>
-      </div>
       <div id="chatList" class="chat-list"></div>
     </div>
 
@@ -481,32 +458,22 @@
       <div class="header">
         <div class="header-main">
           <div id="chatTitle">Чат не выбран</div>
-          <div id="chatSubtitle">
-            Создай диалог или беседу слева, затем выбери чат
-          </div>
+          <div id="chatSubtitle">Создай диалог или беседу слева, затем выбери чат</div>
         </div>
 
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button
-            id="addMemberBtn"
-            class="attach-btn"
-            type="button"
-            title="Добавить участника"
-            style="display:none;"
-          >
-            ➕
-          </button>
-
-          <div id="idsInfo"></div>
+        <div id="idsInfo">
+          <button id="addMemberBtn" class="attach-btn" type="button" title="Добавить участника" style="display:none;">➕</button>
+          <span id="idsText"></span>
         </div>
       </div>
+
       <div id="messages" class="messages"></div>
 
       <div class="input-area">
         <input id="fileInput" type="file" accept="image/*" hidden>
         <button id="attachBtn" class="attach-btn" type="button" disabled title="Прикрепить фото">📎</button>
         <textarea id="msgInput" placeholder="Напиши сообщение…" disabled></textarea>
-        <button id="sendBtn" disabled>Отправить</button>
+        <button id="sendBtn" class="send-btn" disabled>Отправить</button>
       </div>
     </div>
   </div>
