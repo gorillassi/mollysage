@@ -7,7 +7,7 @@ let pollTimer = null;
 
 const chatListEl = document.getElementById('chatList');
 const sideStatus = document.getElementById('sideStatus');
-const selfUserInput = document.getElementById('selfUser'); // может быть, если оставишь поле
+const meLabel = document.getElementById('meLabel');
 const chatTitle = document.getElementById('chatTitle');
 const chatSubtitle = document.getElementById('chatSubtitle');
 const idsInfo = document.getElementById('idsInfo');
@@ -30,10 +30,7 @@ function setStatus(text, ok) {
   else sideStatus.classList.add('error');
 }
 
-function redirectToLogin(reason) {
-  try {
-    if (reason) sessionStorage.setItem('ss_login_reason', reason);
-  } catch (_) {}
+function redirectToLogin() {
   window.location.href = '/login.html';
 }
 
@@ -65,42 +62,32 @@ async function ensureLogin() {
     p = sessionStorage.getItem('ss_password');
   } catch (_) {}
 
-  // Если нет сессии — идём на /login.html (никаких попапов в app)
   if (!u || !p) {
-    // fallback: если ты оставил поле selfUser в app.html, можно дать “быстрый вход”
-    const typed = (selfUserInput && selfUserInput.value ? selfUserInput.value : '').trim();
-    if (typed) {
-      setStatus('Нет сессии. Открой /login.html и войди нормальным паролем.', false);
-      redirectToLogin('no_session');
-      return;
-    }
-    redirectToLogin('no_session');
+    redirectToLogin();
     return;
   }
 
   selfUser = u;
 
-  // ВАЖНО: регистрация в app.js не нужна. Регистрация — через register.html  [oai_citation:2‡register.html](sediment://file_00000000a2f071f58781320e34efa80f)
   try {
     const login = await apiJSON('/login', 'POST', { username: u, password: p });
     selfID = login.id;
   } catch (e) {
-    // 401 или любая ошибка => чистим сессию и возвращаем на /login.html
+    // сессия битая/пароль неверный -> чистим и обратно на логин
     try {
       sessionStorage.removeItem('ss_username');
       sessionStorage.removeItem('ss_password');
     } catch (_) {}
-    setStatus('Сессия протухла или пароль неверный. Войди заново.', false);
-    redirectToLogin('bad_session');
+    redirectToLogin();
     return;
   }
 
+  if (meLabel) meLabel.textContent = selfUser + ' (id=' + selfID + ')';
   setStatus('Ок: ' + selfUser + ' (id=' + selfID + ')', true);
 
   await loadGroups();
   renderChatList();
 
-  // начальный прогон: НЕ считать старую историю непрочитанной
   try { await refreshUnreadForOthers(); } catch (_) {}
 }
 
@@ -521,6 +508,14 @@ createGroupBtn.addEventListener('click', () => {
   createGroup().catch(err => setStatus('Ошибка беседы: ' + err.message, false));
 });
 
-ensureLogin().catch(() => {
-  // ensureLogin сам редиректит при проблемах
-});
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', () => {
+    try {
+      sessionStorage.removeItem('ss_username');
+      sessionStorage.removeItem('ss_password');
+    } catch (_) {}
+    redirectToLogin();
+  });
+}
+
+ensureLogin().catch(() => {});

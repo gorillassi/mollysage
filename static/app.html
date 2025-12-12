@@ -447,10 +447,12 @@
           </div>
         </div>
 
-        <div class="row">
-          <input id="selfUser" placeholder="username (например: alice)" />
-          <input id="selfPass" type="password" placeholder="password" />
-          <button id="loginBtn">Войти</button>
+        <div class="row" style="gap:10px;">
+          <div style="flex:1; padding:10px 12px; border-radius:12px; background: rgba(2,6,23,0.55); border:1px solid rgba(148,163,184,0.18);">
+            <div style="font-size:11px; color: var(--muted); margin-bottom:2px;">Ты</div>
+            <div id="meLabel" style="font-weight:900; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</div>
+          </div>
+          <button id="logoutBtn" title="Выйти">Выйти</button>
         </div>
       </div>
 
