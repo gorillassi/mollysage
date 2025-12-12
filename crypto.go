@@ -9,7 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
-
+	"os"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/hkdf"
 )
@@ -148,4 +148,19 @@ func DecryptMessageE2E(receiverPriv, senderPub, ciphertext, nonce []byte) ([]byt
 		return nil, err
 	}
 	return aesGCMDecrypt(sessionKey, ciphertext, nonce)
+}
+
+func mustLoadOrCreateServerKey(path string) []byte {
+	key, err := os.ReadFile(path)
+	if err == nil && len(key) == 32 {
+		return key
+	}
+	key = make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(path, key, 0600); err != nil {
+		panic(err)
+	}
+	return key
 }

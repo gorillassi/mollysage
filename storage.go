@@ -361,3 +361,52 @@ func (s *GroupMessageStore) List(groupID int64) ([]*GroupMessage, error) {
 	}
 	return res, nil
 }
+
+type PlainMedia struct {
+	ID           int64
+	Kind         string
+	FromUserID   int64
+	ToUserID     sql.NullInt64
+	GroupID      sql.NullInt64
+	Ciphertext   []byte
+	Nonce        []byte
+	ContentType  string
+	OriginalName string
+	CreatedAt    string
+}
+
+type PlainMediaStore struct{ db *sql.DB }
+
+func NewPlainMediaStore(db *sql.DB) *PlainMediaStore { return &PlainMediaStore{db: db} }
+
+func (s *PlainMediaStore) Create(m *PlainMedia) (*PlainMedia, error) {
+	res, err := s.db.Exec(`
+		INSERT INTO plain_media
+		(kind, from_user_id, to_user_id, group_id, ciphertext, nonce, content_type, original_name)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		m.Kind, m.FromUserID, m.ToUserID, m.GroupID,
+		m.Ciphertext, m.Nonce, m.ContentType, m.OriginalName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, _ := res.LastInsertId()
+	m.ID = id
+	return m, nil
+}
+
+func (s *PlainMediaStore) GetByID(id int64) (*PlainMedia, error) {
+	var m PlainMedia
+	err := s.db.QueryRow(`
+		SELECT id, kind, from_user_id, to_user_id, group_id,
+		       ciphertext, nonce, content_type, original_name, created_at
+		FROM plain_media WHERE id=?`, id,
+	).Scan(
+		&m.ID, &m.Kind, &m.FromUserID, &m.ToUserID, &m.GroupID,
+		&m.Ciphertext, &m.Nonce, &m.ContentType, &m.OriginalName, &m.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}

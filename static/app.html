@@ -1,361 +1,345 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Чаты · MollySage</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mollysage — Secure Social</title>
   <style>
     :root {
-      --bg: #020617;
-      --panel: #111827;
-      --panel-soft: #0b1120;
-      --border: #1f2937;
-      --border-soft: rgba(148,163,184,0.35);
-      --accent: #3b82f6;
-      --accent-strong: #2563eb;
+      --bg: #0b1020;
+      --panel: rgba(15, 23, 42, 0.7);
+      --panel-2: rgba(2, 6, 23, 0.7);
+      --border: rgba(148, 163, 184, 0.16);
       --text: #e5e7eb;
       --muted: #9ca3af;
+      --accent: #3b82f6;
+      --accent-strong: #2563eb;
       --danger: #f97373;
     }
 
     * { box-sizing: border-box; }
-
+    html, body { height: 100%; }
     body {
       margin: 0;
-      height: 100vh;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 700px at 20% 10%, rgba(37,99,235,0.35), transparent 55%),
+                  radial-gradient(900px 600px at 85% 30%, rgba(59,130,246,0.25), transparent 55%),
+                  linear-gradient(180deg, #020617, #0b1020);
       color: var(--text);
-      background:
-        radial-gradient(circle at 0 0, rgba(59,130,246,0.2), transparent 55%),
-        radial-gradient(circle at 100% 100%, rgba(45,212,191,0.18), transparent 55%),
-        var(--bg);
-      display: flex;
+      overflow: hidden;
     }
 
-    .sidebar {
-      width: 300px;
-      background: linear-gradient(160deg, #020617, #020617 40%, #020617 100%);
-      border-right: 1px solid var(--border);
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .side {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border-radius: 18px;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
+      min-width: 320px;
+    }
+
+    .side .top {
       padding: 14px 14px 10px;
-      gap: 10px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(2,6,23,0.72), rgba(2,6,23,0.35));
     }
 
     .brand {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 4px;
+      gap: 10px;
+      margin-bottom: 12px;
     }
 
     .logo {
-      display: flex;
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), rgba(37,99,235,0.25));
+      box-shadow: 0 14px 26px rgba(37,99,235,0.45);
+      display: inline-flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      font-weight: 900;
+      letter-spacing: 0.5px;
     }
 
-    .logo-mark {
-      width: 26px;
-      height: 26px;
-      border-radius: 999px;
-      background: conic-gradient(from 210deg, #22c55e, #3b82f6, #a855f7, #22c55e);
-      position: relative;
-      overflow: hidden;
-    }
-    .logo-mark::after {
-      content: "";
-      position: absolute;
-      inset: 3px;
-      border-radius: inherit;
-      background: radial-gradient(circle at 30% 20%, rgba(248,250,252,0.95), rgba(15,23,42,0.98));
+    .brand h1 {
+      font-size: 14px;
+      margin: 0;
+      line-height: 1.1;
+      font-weight: 800;
     }
 
-    .logo-title {
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-    }
-
-    .logo-sub {
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .chip {
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border-soft);
-      background: #020617;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .section-title {
-      margin: 4px 2px 4px;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.11em;
-      color: rgba(156,163,175,0.9);
-    }
-
-    .field {
-      margin-bottom: 8px;
-    }
-
-    label {
-      display: block;
+    .brand p {
+      margin: 0;
       font-size: 12px;
       color: var(--muted);
-      margin-bottom: 3px;
     }
 
-    input {
-      width: 100%;
-      padding: 7px 9px;
-      border-radius: 9px;
-      border: 1px solid #374151;
-      background: #020617;
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .row input {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(2, 6, 23, 0.55);
       color: var(--text);
-      font-size: 13px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
       outline: none;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-    }
-    input::placeholder {
-      color: rgba(148,163,184,0.7);
-    }
-    input:focus {
-      border-color: var(--accent);
-      box-shadow:
-        0 0 0 1px rgba(59,130,246,0.7),
-        0 0 14px rgba(37,99,235,0.35);
-      background: #020617;
     }
 
-    .btn-main {
-      width: 100%;
-      margin-top: 2px;
-      padding: 8px 10px;
-      border-radius: 999px;
-      border: none;
-      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-      color: white;
-      font-size: 13px;
-      font-weight: 600;
+    .row button {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(2, 6, 23, 0.55);
+      color: var(--text);
       cursor: pointer;
-      box-shadow:
-        0 10px 24px rgba(37,99,235,0.85),
-        0 0 0 1px #020617;
-      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+      font-weight: 700;
+      transition: transform 0.1s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
-    .btn-main:hover {
+
+    .row button:hover {
+      border-color: rgba(59,130,246,0.55);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.25);
       transform: translateY(-1px);
-      filter: brightness(1.04);
-    }
-    .btn-main:active {
-      transform: translateY(0);
-      box-shadow:
-        0 6px 18px rgba(15,23,42,0.9),
-        0 0 0 1px #020617;
     }
 
     .status {
-      font-size: 11px;
-      min-height: 16px;
-      margin-top: 4px;
+      margin-top: 10px;
+      font-size: 12px;
       color: var(--muted);
-      white-space: pre-wrap;
-      word-break: break-word;
+      min-height: 18px;
     }
+    .status.ok { color: #86efac; }
     .status.error { color: var(--danger); }
-    .status.ok { color: #a7f3d0; }
+
+    .side .actions {
+      display: flex;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(2,6,23,0.22);
+    }
+
+    .side .actions button {
+      flex: 1;
+      padding: 10px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(2,6,23,0.55);
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .side .actions button.primary {
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      box-shadow: 0 12px 22px rgba(37,99,235,0.35);
+    }
 
     .chat-list {
       flex: 1;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: #020617;
-      padding: 6px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .chat-list-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 2px 4px 4px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    #chatList {
-      margin-top: 2px;
-      overflow-y: auto;
-      padding: 2px 0;
+      overflow: auto;
+      padding: 8px;
     }
 
     .chat-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 6px 8px;
-      border-radius: 999px;
-      margin-bottom: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      color: var(--muted);
+      padding: 10px 10px;
+      border-radius: 14px;
       border: 1px solid transparent;
-      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+      background: rgba(2,6,23,0.18);
+      cursor: pointer;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 8px 6px;
+      transition: border-color 0.15s ease, background 0.15s ease;
     }
 
     .chat-item:hover {
-      background: #020617;
-      border-color: #1f2937;
-      color: var(--text);
+      border-color: rgba(148, 163, 184, 0.2);
+      background: rgba(2,6,23,0.26);
     }
 
     .chat-item.active {
-      background:
-        radial-gradient(circle at 0 0, rgba(59,130,246,0.32), transparent 60%),
-        #020617;
-      border-color: rgba(59,130,246,0.75);
-      color: var(--text);
-      box-shadow: 0 6px 18px rgba(15,23,42,0.9);
-      transform: translateY(-1px);
+      border-color: rgba(59,130,246,0.7);
+      background: rgba(37,99,235,0.12);
     }
 
-    .chat-item-name {
-      max-width: 150px;
+    .chat-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(148,163,184,0.18), rgba(59,130,246,0.18));
+      border: 1px solid rgba(148,163,184,0.18);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: rgba(229,231,235,0.85);
+    }
+
+    .chat-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .chat-title {
+      font-weight: 900;
+      font-size: 13px;
+      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
-    .chat-item-pill {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: #020617;
-      border: 1px solid rgba(148,163,184,0.6);
-    }
-    
-    .unread-badge {
-      margin-left: 4px;
-      min-width: 16px;
-      padding: 0 5px;
-      border-radius: 999px;
-      background: #ef4444;
-      color: #f9fafb;
-      font-size: 10px;
-      text-align: center;
-      font-weight: 600;
-    }
-
-    .sidebar-foot {
-      font-size: 11px;
+    .chat-sub {
+      margin-top: 2px;
+      font-size: 12px;
       color: var(--muted);
-      border-top: 1px solid var(--border);
-      padding-top: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      min-width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: rgba(59,130,246,0.95);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 0 8px;
+      box-shadow: 0 10px 18px rgba(37,99,235,0.35);
     }
 
     .main {
-      flex: 1;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border-radius: 18px;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
+      min-width: 0;
     }
 
     .header {
-      padding: 12px 18px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(135deg, #020617, #020617 60%);
+      background: linear-gradient(180deg, rgba(2,6,23,0.72), rgba(2,6,23,0.35));
       display: flex;
+      gap: 12px;
       align-items: center;
       justify-content: space-between;
     }
 
     .header-main {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+      min-width: 0;
     }
 
     #chatTitle {
+      font-weight: 900;
       font-size: 14px;
-      font-weight: 500;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     #chatSubtitle {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     #idsInfo {
-      font-size: 11px;
-      color: rgba(156,163,175,0.95);
-      padding: 4px 8px;
+      font-size: 12px;
+      color: rgba(229,231,235,0.75);
+      padding: 6px 10px;
       border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.4);
-      background: #020617;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(2,6,23,0.45);
+      white-space: nowrap;
     }
 
     .messages {
       flex: 1;
-      padding: 14px 18px;
-      overflow-y: auto;
-      background:
-        radial-gradient(circle at 20% 0, rgba(59,130,246,0.18), transparent 60%),
-        radial-gradient(circle at 100% 80%, rgba(34,197,94,0.16), transparent 65%),
-        #020617;
+      overflow: auto;
+      padding: 14px 14px 2px;
+      background: linear-gradient(180deg, #020617, #020617);
+      gap: 8px;
     }
 
     .msg {
-      max-width: 72%;
-      padding: 8px 10px;
-      border-radius: 12px;
-      margin-bottom: 7px;
-      font-size: 13px;
-      line-height: 1.35;
-      word-break: break-word;
-      position: relative;
+      max-width: 760px;
+      margin: 0 0 12px 0;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      background: rgba(2, 6, 23, 0.55);
+      box-shadow: 0 16px 30px rgba(0,0,0,0.25);
     }
 
     .msg.self {
       margin-left: auto;
-      background:
-        radial-gradient(circle at 0 0, rgba(191,219,254,0.35), transparent 60%),
-        rgba(37,99,235,0.95);
-      border-bottom-right-radius: 4px;
-      box-shadow: 0 8px 20px rgba(15,23,42,0.7);
-    }
-
-    .msg.peer {
-      background:
-        radial-gradient(circle at 100% 0, rgba(34,197,94,0.28), transparent 65%),
-        rgba(15,23,42,0.96);
-      border-bottom-left-radius: 4px;
-      border: 1px solid rgba(148,163,184,0.35);
+      border-color: rgba(59,130,246,0.18);
+      background: rgba(37,99,235,0.12);
     }
 
     .msg-meta {
-      font-size: 10px;
-      color: rgba(209,213,219,0.9);
-      margin-bottom: 2px;
-      opacity: 0.9;
+      font-size: 11px;
+      color: rgba(229,231,235,0.72);
+      margin-bottom: 6px;
+      font-weight: 700;
     }
 
-    .msg.peer .msg-meta {
-      color: rgba(148,163,184,0.95);
+    .msg > div:last-child {
+      font-size: 13px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: rgba(229,231,235,0.95);
+    }
+
+    .msg-img {
+      max-width: min(380px, 70vw);
+      border-radius: 14px;
+      display: block;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+      border: 1px solid rgba(148,163,184,0.18);
     }
 
     .input-area {
-      display: flex;
-      padding: 10px 14px;
+      padding: 12px;
       border-top: 1px solid var(--border);
-      background: linear-gradient(180deg, #020617, #020617);
+      background: rgba(2,6,23,0.35);
+      display: flex;
       gap: 8px;
+      align-items: flex-end;
     }
 
     .input-area textarea {
@@ -394,83 +378,107 @@
       box-shadow:
         0 10px 24px rgba(37,99,235,0.8),
         0 0 0 1px #020617;
-      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+      height: 44px;
     }
 
-    .input-area button:hover {
+    .input-area button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .input-area button:hover:enabled {
       transform: translateY(-1px);
-      filter: brightness(1.04);
     }
 
-    .input-area button:active {
-      transform: translateY(0);
-      box-shadow:
-        0 6px 18px rgba(15,23,42,0.9),
-        0 0 0 1px #020617;
+    .input-area .attach-btn {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: 1px solid #374151;
+      background: rgba(2,6,23,0.7);
+      color: var(--text);
+      box-shadow: none;
+      font-size: 16px;
+    }
+
+    .input-area .attach-btn:hover:enabled {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.35);
+      transform: translateY(-1px);
+    }
+
+    .input-area .send-btn {
+      width: 110px;
+    }
+
+    @media (max-width: 980px) {
+      .app {
+        grid-template-columns: 320px 1fr;
+      }
+    }
+
+    @media (max-width: 820px) {
+      body { overflow: auto; }
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 420px 1fr;
+        height: auto;
+      }
+      .side { min-height: 420px; }
+      .main { min-height: 520px; }
     }
   </style>
 </head>
 <body>
-  <div class="sidebar">
-    <div class="brand">
-      <div class="logo">
-        <div class="logo-mark"></div>
-        <div>
-          <div class="logo-title">MollySage</div>
-          <div class="logo-sub">защищённые чаты</div>
+  <div class="app">
+    <div class="side">
+      <div class="top">
+        <div class="brand">
+          <div class="logo">M</div>
+          <div>
+            <h1>Mollysage</h1>
+            <p>Secure Social · demo</p>
+          </div>
         </div>
+
+        <div class="row">
+          <input id="selfUser" placeholder="username (например: alice)" />
+          <button id="loginBtn">Войти</button>
+        </div>
+        <div id="sideStatus" class="status"></div>
       </div>
-      <div class="chip">alpha</div>
-    </div>
 
-    <div class="section-title">Профиль</div>
-    <div class="field">
-      <label for="selfUser">Твой логин</label>
-      <input id="selfUser" disabled>
-    </div>
-
-    <div class="section-title">Новый диалог</div>
-    <div class="field">
-      <label for="directNameInput">Личный чат (логин)</label>
-      <input id="directNameInput" placeholder="bob">
-    </div>
-    <button class="btn-main" id="openDirectBtn">Открыть личный чат</button>
-
-    <div class="section-title">Новая беседа</div>
-    <div class="field">
-      <label for="groupNameInput">Название группы</label>
-      <input id="groupNameInput" placeholder="MIPT 303а">
-    </div>
-    <button class="btn-main" id="createGroupBtn">Создать беседу</button>
-
-    <div class="section-title">Диалоги и беседы</div>
-    <div class="chat-list">
-      <div class="chat-list-header">
-        <span>Чаты</span>
-        <span style="font-size:10px;color:var(--muted);">кликни, чтобы открыть</span>
+      <div class="actions">
+        <button id="openDirectBtn" class="primary">Диалог</button>
+        <button id="createGroupBtn">Беседа</button>
       </div>
-      <div id="chatList"></div>
+
+      <div id="chatList" class="chat-list"></div>
     </div>
 
-    <div class="sidebar-foot">
-      <div>Личные чаты используют plain-API, беседы – `/groups/*`.</div>
-      <div>Крипто-ядро и E2E реализованы на стороне Go-клиента.</div>
-      <div id="sideStatus" class="status"></div>
-    </div>
-  </div>
-
-  <div class="main">
-    <div class="header">
-      <div class="header-main">
-        <div id="chatTitle">Чат не выбран</div>
-        <div id="chatSubtitle">Создай диалог или беседу слева, затем выбери чат</div>
+    <div class="main">
+      <div class="header">
+        <div class="header-main">
+          <div id="chatTitle">Чат не выбран</div>
+          <div id="chatSubtitle">Создай диалог или беседу слева, затем выбери чат</div>
+        </div>
+        <div id="idsInfo"></div>
       </div>
-      <div id="idsInfo"></div>
-    </div>
-    <div id="messages" class="messages"></div>
-    <div class="input-area">
-      <textarea id="msgInput" placeholder="Напиши сообщение…" disabled></textarea>
-      <button id="sendBtn" disabled>Отправить</button>
+
+      <div id="messages" class="messages"></div>
+
+      <div class="input-area">
+        <input id="fileInput" type="file" accept="image/*" hidden>
+        <button id="attachBtn" class="attach-btn" type="button" disabled title="Прикрепить фото">📎</button>
+        <textarea id="msgInput" placeholder="Напиши сообщение…" disabled></textarea>
+        <button id="sendBtn" class="send-btn" disabled>Отправить</button>
+      </div>
     </div>
   </div>
 

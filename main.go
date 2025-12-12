@@ -32,6 +32,22 @@ CREATE TABLE IF NOT EXISTS plain_messages (
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS plain_media (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  kind TEXT NOT NULL,              -- "direct" | "group"
+  from_user_id INTEGER NOT NULL,
+  to_user_id INTEGER,              -- для личных
+  group_id INTEGER,                -- для групп
+
+  ciphertext BLOB NOT NULL,
+  nonce BLOB NOT NULL,
+
+  content_type TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE IF NOT EXISTS groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -85,6 +101,8 @@ func main() {
 	http.HandleFunc("/groups/messages", s.handleGroupMessages)
 	http.HandleFunc("/groups/by_user", s.handleGroupsByUser)
 
+	http.HandleFunc("/api/plain_media/upload", s.handlePlainMediaUpload)
+	http.HandleFunc("/api/plain_media/get", s.handlePlainMediaGet)
 
 	// Статика: / -> отдать файлы из папки static
 	fs := http.FileServer(http.Dir("static"))

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -18,6 +19,8 @@ type Server struct {
 	groupMembers  *GroupMemberStore
 	groupMessages *GroupMessageStore
 	crypto        CryptoConfig
+	plainMedia    *PlainMediaStore
+	plainMediaKey []byte
 }
 
 
@@ -30,6 +33,8 @@ func NewServer(db *sql.DB) *Server {
 		groupMembers:  NewGroupMemberStore(db),
 		groupMessages: NewGroupMessageStore(db),
 		crypto:        defaultCryptoConfig,
+		plainMedia:    NewPlainMediaStore(db),
+		plainMediaKey: mustLoadOrCreateServerKey("server_media_key.bin"),
 	}
 }
 
@@ -683,4 +688,161 @@ func (s *Server) handleGroupsByUser(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+func mustInt64(s string) int64 {
+	var v int64
+	if _, err := fmt.Sscan(strings.TrimSpace(s), &v); err != nil || v <= 0 {
+		return 0
+	}
+	return v
+}
+
+// POST multipart/form-data:
+// kind=direct|group
+// from_user_id=...
+// to_user_id=... (для direct)
+// group_id=... (для group)
+// file=<image>
+func (s *Server) handlePlainMediaUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseMultipartForm(20 << 20); err != nil {
+		http.Error(w, "bad multipart form", http.StatusBadRequest)
+		return
+	}
+
+	kind := strings.TrimSpace(r.FormValue("kind"))
+	fromID := mustInt64(r.FormValue("from_user_id"))
+	if fromID == 0 {
+		http.Error(w, "bad from_user_id", http.StatusBadRequest)
+		return
+	}
+
+	// базовые проверки существования
+	if _, err := s.users.GetByID(fromID); err != nil {
+		http.Error(w, "from_user not found", http.StatusBadRequest)
+		return
+	}
+
+	var toID int64
+	var gid int64
+
+	if kind == "direct" {
+		toID = mustInt64(r.FormValue("to_user_id"))
+		if toID == 0 {
+			http.Error(w, "bad to_user_id", http.StatusBadRequest)
+			return
+		}
+		if _, err := s.users.GetByID(toID); err != nil {
+			http.Error(w, "to_user not found", http.StatusBadRequest)
+			return
+		}
+	} else if kind == "group" {
+		gid = mustInt64(r.FormValue("group_id"))
+		if gid == 0 {
+			http.Error(w, "bad group_id", http.StatusBadRequest)
+			return
+		}
+		if _, err := s.groups.GetByID(gid); err != nil {
+			http.Error(w, "group not found", http.StatusBadRequest)
+			return
+		}
+		ok, err := s.groupMembers.IsMember(gid, fromID)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	} else {
+		http.Error(w, "bad kind", http.StatusBadRequest)
+		return
+	}
+
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "file required", http.StatusBadRequest)
+		return
+	}
+	defer f.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(f, 20<<20))
+	if err != nil {
+		http.Error(w, "read error", http.StatusInternalServerError)
+		return
+	}
+
+	contentType := hdr.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = http.DetectContentType(raw)
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		http.Error(w, "only images allowed", http.StatusBadRequest)
+		return
+	}
+
+	// 🔐 ШИФРУЕМ ПЕРЕД ЗАПИСЬЮ В БД
+	ct, nonce, err := aesGCMEncrypt(s.plainMediaKey, raw)
+	if err != nil {
+		http.Error(w, "crypto error", http.StatusInternalServerError)
+		return
+	}
+
+	pm := &PlainMedia{
+		Kind:         kind,
+		FromUserID:   fromID,
+		Ciphertext:   ct,
+		Nonce:        nonce,
+		ContentType:  contentType,
+		OriginalName: hdr.Filename,
+	}
+
+	if kind == "direct" {
+		pm.ToUserID = sql.NullInt64{Int64: toID, Valid: true}
+	} else {
+		pm.GroupID = sql.NullInt64{Int64: gid, Valid: true}
+	}
+
+	created, err := s.plainMedia.Create(pm)
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]int64{"id": created.ID})
+}
+
+func (s *Server) handlePlainMediaGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := mustInt64(r.URL.Query().Get("id"))
+	if id == 0 {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+
+	m, err := s.plainMedia.GetByID(id)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	raw, err := aesGCMDecrypt(s.plainMediaKey, m.Ciphertext, m.Nonce)
+	if err != nil {
+		http.Error(w, "decrypt failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", m.ContentType)
+	w.Header().Set("Content-Disposition", `inline; filename="`+m.OriginalName+`"`)
+	_, _ = w.Write(raw)
 }
