@@ -597,11 +597,12 @@ func (s *Server) handleGroupSend(w http.ResponseWriter, r *http.Request) {
 }
 
 type GroupMessageDTO struct {
-	ID         int64  `json:"id"`
-	GroupID    int64  `json:"group_id"`
-	FromUserID int64  `json:"from_user_id"`
-	Text       string `json:"text"`
-	CreatedAt  string `json:"created_at"`
+	ID           int64  `json:"id"`
+	GroupID      int64  `json:"group_id"`
+	FromUserID   int64  `json:"from_user_id"`
+	FromUsername string `json:"from_username"`
+	Text         string `json:"text"`
+	CreatedAt    string `json:"created_at"`
 }
 
 func (s *Server) handleGroupMessages(w http.ResponseWriter, r *http.Request) {
@@ -610,35 +611,40 @@ func (s *Server) handleGroupMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := r.URL.Query()
-	gidStr := strings.TrimSpace(q.Get("group_id"))
-	if gidStr == "" {
+	gid := mustInt64(strings.TrimSpace(r.URL.Query().Get("group_id")))
+	if gid <= 0 {
 		http.Error(w, "group_id required", http.StatusBadRequest)
 		return
 	}
 
-	var gid int64
-	if _, err := fmt.Sscan(gidStr, &gid); err != nil || gid <= 0 {
-		http.Error(w, "bad group_id", http.StatusBadRequest)
-		return
-	}
-
-	// просто возвращаем все сообщения; фильтрация по членству — на фронте или можно добавить параметр user_id
-	msgs, err := s.groupMessages.List(gid)
+	// ВАЖНО: берём username отправителя через JOIN
+	const q = `
+SELECT gm.id, gm.group_id, gm.from_user_id, COALESCE(u.username, ''),
+       gm.text, gm.created_at
+FROM group_messages gm
+LEFT JOIN users u ON u.id = gm.from_user_id
+WHERE gm.group_id = ?
+ORDER BY gm.id;
+`
+	rows, err := s.plainMedia.db.Query(q, gid) // если у тебя нет s.db, используй любой store с db
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
 
-	out := make([]GroupMessageDTO, 0, len(msgs))
-	for _, m := range msgs {
-		out = append(out, GroupMessageDTO{
-			ID:         m.ID,
-			GroupID:    m.GroupID,
-			FromUserID: m.FromUserID,
-			Text:       m.Text,
-			CreatedAt:  m.CreatedAt,
-		})
+	out := make([]GroupMessageDTO, 0, 64)
+	for rows.Next() {
+		var m GroupMessageDTO
+		if err := rows.Scan(&m.ID, &m.GroupID, &m.FromUserID, &m.FromUsername, &m.Text, &m.CreatedAt); err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
