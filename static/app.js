@@ -4,31 +4,25 @@ let selfID = null;
 const conversations = {}; // key -> {type, title, peerName, peerID, groupID, lastKnown, lastRead, unread}
 let activeKey = null;
 let pollTimer = null;
-let presenceTimer = null;
 
 const chatListEl = document.getElementById('chatList');
-const onlineListEl = document.getElementById('onlineList');
 const sideStatus = document.getElementById('sideStatus');
-
-const whoUserEl = document.getElementById('whoUser');
-const logoutLink = document.getElementById('logoutLink');
-
+const selfUserInput = document.getElementById('selfUser');
 const chatTitle = document.getElementById('chatTitle');
 const chatSubtitle = document.getElementById('chatSubtitle');
 const idsInfo = document.getElementById('idsInfo');
-
 const messagesEl = document.getElementById('messages');
 const msgInput = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
-
 const attachBtn = document.getElementById('attachBtn');
 const fileInput = document.getElementById('fileInput');
 
 const openDirectBtn = document.getElementById('openDirectBtn');
 const createGroupBtn = document.getElementById('createGroupBtn');
+const loginBtn = document.getElementById('loginBtn');
 
-const onlineRefreshBtn = document.getElementById('onlineRefreshBtn');
-const chatsRefreshBtn = document.getElementById('chatsRefreshBtn');
+// (опционально) если добавишь кнопку в app.html — она появится
+const addMemberBtn = document.getElementById('addMemberBtn');
 
 function setStatus(text, ok) {
   sideStatus.textContent = text || '';
@@ -55,103 +49,80 @@ async function apiJSON(url, method, body) {
   return await resp.text();
 }
 
-// ===== auth (берём из sessionStorage после login.html) =====
+// ===== localStorage per-user =====
 
-function getSessionCreds() {
-  let u = null, p = null;
-  try {
-    u = sessionStorage.getItem('ss_username');
-    p = sessionStorage.getItem('ss_password');
-  } catch (_) {}
-  u = (u || '').trim();
-  p = (p || '');
-  return { username: u, password: p };
+function lsPrefix() {
+  return selfUser ? `ss_${selfUser}_` : `ss_`;
 }
 
-function clearSessionCreds() {
+function lsGet(k, defVal) {
   try {
-    sessionStorage.removeItem('ss_username');
-    sessionStorage.removeItem('ss_password');
+    const v = localStorage.getItem(lsPrefix() + k);
+    if (v === null || v === undefined) return defVal;
+    return v;
+  } catch (_) {
+    return defVal;
+  }
+}
+
+function lsSet(k, val) {
+  try {
+    localStorage.setItem(lsPrefix() + k, String(val));
   } catch (_) {}
 }
+
+function loadConvLastRead(key) {
+  const v = Number(lsGet('lastRead_' + key, '0'));
+  return Number.isFinite(v) ? v : 0;
+}
+
+function saveConvLastRead(key, id) {
+  const v = Number(id || 0);
+  lsSet('lastRead_' + key, String(v));
+}
+
+// ===== auth =====
 
 async function ensureLogin() {
   if (selfID) return;
 
-  const { username, password } = getSessionCreds();
-  if (!username || !password) {
-    window.location.href = '/login.html';
-    return;
-  }
+  const u = (selfUserInput.value || '').trim();
+  if (!u) throw new Error('введи username');
+  selfUser = u;
 
-  selfUser = username;
-  if (whoUserEl) whoUserEl.textContent = selfUser;
+  // пароль в демке = username + "pass" (alicepass/bobpass)
+  const pass = u + 'pass';
 
-  const login = await apiJSON('/login', 'POST', { username, password });
+  // регистрируем (если уже есть — ок)
+  try {
+    await apiJSON('/register', 'POST', { username: u, password: pass });
+  } catch (_) {}
+
+  const login = await apiJSON('/login', 'POST', { username: u, password: pass });
   selfID = login.id;
 
-  setStatus('Ок: ' + selfUser + ' (id=' + selfID + ')', true);
+  setStatus('Ок: ' + u + ' (id=' + selfID + ')', true);
 
-  // IMPORTANT: при смене аккаунта не тащим чужие диалоги
-  loadDirectFromStorage();
   await loadGroups();
+
+  // восстановим lastRead из localStorage для всех уже известных чатов
+  for (const key of Object.keys(conversations)) {
+    conversations[key].lastRead = loadConvLastRead(key);
+  }
+
+  // подтянуть inbox (чтобы диалоги появлялись даже если ты их не создавал вручную)
+  try {
+    await loadInbox();
+  } catch (_) {}
+
   renderChatList();
-
-  await refreshUnreadBootstrap();
-  await refreshOnlineOnce();
-
-  startPresence();
   startPolling();
 }
 
-// ===== keys / storage =====
+// ===== UI helpers =====
 
 function convKeyUser(peerName) { return 'u:' + peerName; }
 function convKeyGroup(groupID) { return 'g:' + groupID; }
-
-function storageKeyForUser() {
-  return 'ss_direct_chats:' + (selfUser || 'unknown');
-}
-
-function loadDirectFromStorage() {
-  // сохраняем список открытых direct-чатов отдельно на каждого юзера
-  for (const k of Object.keys(conversations)) {
-    if (conversations[k].type === 'user') delete conversations[k];
-  }
-  try {
-    const raw = localStorage.getItem(storageKeyForUser());
-    if (!raw) return;
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return;
-    for (const it of arr) {
-      if (!it || !it.peerName) continue;
-      const key = convKeyUser(it.peerName);
-      conversations[key] = {
-        type: 'user',
-        title: it.peerName,
-        peerName: it.peerName,
-        peerID: it.peerID || null,
-        lastKnown: 0,
-        lastRead: 0,
-        unread: 0
-      };
-    }
-  } catch (_) {}
-}
-
-function saveDirectToStorage() {
-  try {
-    const arr = [];
-    for (const key of Object.keys(conversations)) {
-      const c = conversations[key];
-      if (c.type !== 'user') continue;
-      arr.push({ peerName: c.peerName, peerID: c.peerID || null });
-    }
-    localStorage.setItem(storageKeyForUser(), JSON.stringify(arr));
-  } catch (_) {}
-}
-
-// ===== UI =====
 
 function avatarLetter(title) {
   const s = (title || '').trim();
@@ -222,7 +193,7 @@ function renderMessageBody(container, text) {
   container.textContent = s;
 }
 
-function renderMessages(msgs, conv) {
+function renderMessages(msgs) {
   messagesEl.innerHTML = '';
   if (!Array.isArray(msgs)) return 0;
 
@@ -238,14 +209,9 @@ function renderMessages(msgs, conv) {
     wrapper.className = 'msg ' + (isSelf ? 'self' : 'peer');
     meta.className = 'msg-meta';
 
-    let who = '';
-    if (conv && conv.type === 'group') {
-      who = (m.from_username && String(m.from_username).trim())
-        ? m.from_username
-        : (isSelf ? 'Ты' : 'Участник');
-    } else {
-      who = isSelf ? 'Ты' : (conv ? conv.peerName : 'Собеседник');
-    }
+    const who = (m.from_username && String(m.from_username).trim())
+      ? m.from_username
+      : (isSelf ? 'Ты' : 'Собеседник');
 
     meta.textContent = m.created_at ? (who + ' · ' + m.created_at) : who;
     renderMessageBody(body, m.text);
@@ -273,18 +239,78 @@ async function loadGroups() {
         title: g.name || ('group #' + g.id),
         groupID: g.id,
         lastKnown: 0,
-        lastRead: 0,
+        lastRead: loadConvLastRead(key),
         unread: 0
       };
     }
   }
 }
 
-async function refreshUnreadBootstrap() {
-  // чтобы при первом входе история не стала "непрочитанной"
+async function loadInbox() {
+  if (!selfID) return;
+  const items = await apiJSON('/chat/inbox?user_id=' + encodeURIComponent(selfID), 'GET');
+  if (!Array.isArray(items)) return;
+
+  for (const it of items) {
+    const peerName = String(it.peer_username || '').trim();
+    if (!peerName) continue;
+
+    const key = convKeyUser(peerName);
+    if (!conversations[key]) {
+      conversations[key] = {
+        type: 'user',
+        title: peerName,
+        peerName: peerName,
+        peerID: it.peer_id || null,
+        lastKnown: 0,
+        lastRead: loadConvLastRead(key),
+        unread: 0
+      };
+    } else {
+      conversations[key].peerID = conversations[key].peerID || it.peer_id || null;
+    }
+  }
+}
+
+// ===== polling + unread правильным способом =====
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(() => {
+    pollOnce().catch(() => {});
+  }, 2000);
+}
+
+function calcUnread(conv, msgs) {
+  const lastRead = Number(conv.lastRead || 0);
+  let maxID = 0;
+  let unread = 0;
+
+  for (const m of (msgs || [])) {
+    const id = Number(m.id || 0);
+    if (id > maxID) maxID = id;
+    if (id > lastRead && m.from_user_id !== selfID) unread++;
+  }
+  return { maxID, unread };
+}
+
+async function pollOnce() {
+  if (!selfID) return;
+
+  // подмешиваем новые диалоги из inbox (чтобы чат появлялся, даже если не открывали вручную)
+  try { await loadInbox(); } catch (_) {}
+
   const keys = Object.keys(conversations);
   for (const key of keys) {
     const conv = conversations[key];
+
     let msgs = [];
     if (conv.type === 'group') {
       msgs = await apiJSON('/groups/messages?group_id=' + encodeURIComponent(conv.groupID), 'GET');
@@ -295,13 +321,53 @@ async function refreshUnreadBootstrap() {
       }
       msgs = await apiJSON('/chat/messages?user_a=' + encodeURIComponent(selfID) + '&user_b=' + encodeURIComponent(conv.peerID), 'GET');
     }
-    let localMax = 0;
-    for (const m of (msgs || [])) localMax = Math.max(localMax, m.id || 0);
-    conv.lastKnown = localMax;
-    conv.lastRead = localMax;
-    conv.unread = 0;
+
+    const { maxID, unread } = calcUnread(conv, msgs);
+    conv.lastKnown = Math.max(conv.lastKnown || 0, maxID);
+
+    if (key !== activeKey) {
+      conv.unread = unread;
+    } else {
+      // если чат открыт — считаем прочитанным всё что пришло
+      conv.lastRead = conv.lastKnown;
+      saveConvLastRead(key, conv.lastRead);
+      conv.unread = 0;
+    }
   }
+
   renderChatList();
+
+  // если активный чат есть — обновим ленту
+  if (activeKey) {
+    await loadMessagesForActive();
+  }
+}
+
+// ===== actions =====
+
+async function setActiveConversation(key) {
+  await ensureLogin();
+  activeKey = key;
+  const conv = conversations[key];
+  if (!conv) return;
+
+  if (conv.type === 'group') {
+    chatTitle.textContent = conv.title;
+    chatSubtitle.textContent = 'Групповая беседа';
+    idsInfo.textContent = 'Ты: ' + selfID + ' · group_id: ' + conv.groupID;
+    if (addMemberBtn) addMemberBtn.style.display = '';
+  } else {
+    chatTitle.textContent = 'Диалог с ' + conv.title;
+    chatSubtitle.textContent = 'Личный чат';
+    idsInfo.textContent = 'Ты: ' + selfID + ' · peer: ' + conv.peerName;
+    if (addMemberBtn) addMemberBtn.style.display = 'none';
+  }
+
+  msgInput.disabled = false;
+  sendBtn.disabled = false;
+  if (attachBtn) attachBtn.disabled = false;
+
+  await loadMessagesForActive();
 }
 
 async function loadMessagesForActive() {
@@ -320,223 +386,18 @@ async function loadMessagesForActive() {
     msgs = await apiJSON('/chat/messages?user_a=' + encodeURIComponent(selfID) + '&user_b=' + encodeURIComponent(conv.peerID), 'GET');
   }
 
-  const maxID = renderMessages(msgs, conv);
+  const maxID = renderMessages(msgs);
   conv.lastKnown = Math.max(conv.lastKnown || 0, maxID);
+
+  // при открытом чате — прочитано
   conv.lastRead = conv.lastKnown;
+  saveConvLastRead(activeKey, conv.lastRead);
   conv.unread = 0;
 
   renderChatList();
 }
 
-// ===== online presence =====
-
-function stopPresence() {
-  if (presenceTimer) {
-    clearInterval(presenceTimer);
-    presenceTimer = null;
-  }
-}
-
-async function refreshOnlineOnce() {
-  if (!selfID) return;
-  try {
-    const list = await apiJSON('/presence/online', 'GET');
-    renderOnline(list);
-  } catch (_) {}
-}
-
-function startPresence() {
-  stopPresence();
-  presenceTimer = setInterval(async () => {
-    if (!selfID) return;
-    try { await apiJSON('/presence/ping', 'POST', { user_id: selfID }); } catch (_) {}
-    await refreshOnlineOnce();
-  }, 5000);
-}
-
-function renderOnline(list) {
-  if (!onlineListEl) return;
-  onlineListEl.innerHTML = '';
-  if (!Array.isArray(list)) return;
-
-  for (const u of list) {
-    if (!u || !u.username) continue;
-    if (u.id === selfID) continue;
-
-    const item = document.createElement('div');
-    item.className = 'chat-item';
-
-    const av = document.createElement('div');
-    av.className = 'chat-avatar';
-    av.textContent = avatarLetter(u.username);
-
-    const text = document.createElement('div');
-    text.className = 'chat-text';
-
-    const title = document.createElement('div');
-    title.className = 'chat-title';
-    title.textContent = u.username;
-
-    const sub = document.createElement('div');
-    sub.className = 'chat-sub';
-    sub.textContent = 'online';
-
-    text.appendChild(title);
-    text.appendChild(sub);
-    item.appendChild(av);
-    item.appendChild(text);
-
-    item.addEventListener('click', async () => {
-      await ensureLogin();
-      const key = convKeyUser(u.username);
-      if (!conversations[key]) {
-        conversations[key] = {
-          type: 'user',
-          title: u.username,
-          peerName: u.username,
-          peerID: u.id,
-          lastKnown: 0,
-          lastRead: 0,
-          unread: 0
-        };
-        saveDirectToStorage();
-      } else {
-        conversations[key].peerID = conversations[key].peerID || u.id;
-      }
-      renderChatList();
-      await setActiveConversation(key);
-    });
-
-    onlineListEl.appendChild(item);
-  }
-}
-
-// ===== polling =====
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-}
-
-function startPolling() {
-  stopPolling();
-  pollTimer = setInterval(() => {
-    pollOnce().catch(() => {});
-  }, 2000);
-}
-
-async function pollOnce() {
-  if (!selfID) return;
-
-  // 1) inbox: чтобы новые диалоги появлялись сами
-  try {
-    const inbox = await apiJSON('/chat/inbox?user_id=' + encodeURIComponent(selfID), 'GET');
-    if (Array.isArray(inbox)) {
-      for (const it of inbox) {
-        const peerName = it.peer_username;
-        const peerID = it.peer_id;
-        const lastID = it.last_message_id || 0;
-
-        if (!peerName || !peerID) continue;
-
-        const key = convKeyUser(peerName);
-        if (!conversations[key]) {
-          conversations[key] = {
-            type: 'user',
-            title: peerName,
-            peerName: peerName,
-            peerID: peerID,
-            lastKnown: 0,
-            lastRead: 0,
-            unread: 0
-          };
-          saveDirectToStorage();
-        }
-
-        const conv = conversations[key];
-        conv.peerID = conv.peerID || peerID;
-        conv.lastKnown = Math.max(conv.lastKnown || 0, lastID);
-
-        if (key !== activeKey) {
-          const base = conv.lastRead || 0;
-          const diff = (conv.lastKnown || 0) - base;
-          conv.unread = diff > 0 ? diff : 0;
-        } else {
-          conv.lastRead = conv.lastKnown;
-          conv.unread = 0;
-        }
-      }
-    }
-  } catch (_) {}
-
-  // 2) по всем чатам обновляем lastKnown/unread
-  const keys = Object.keys(conversations);
-  for (const key of keys) {
-    const conv = conversations[key];
-
-    let msgs = [];
-    if (conv.type === 'group') {
-      msgs = await apiJSON('/groups/messages?group_id=' + encodeURIComponent(conv.groupID), 'GET');
-    } else {
-      if (!conv.peerID) {
-        const data = await apiJSON('/public_key?username=' + encodeURIComponent(conv.peerName), 'GET');
-        conv.peerID = data.id;
-      }
-      msgs = await apiJSON('/chat/messages?user_a=' + encodeURIComponent(selfID) + '&user_b=' + encodeURIComponent(conv.peerID), 'GET');
-    }
-
-    let localMax = 0;
-    for (const m of (msgs || [])) localMax = Math.max(localMax, m.id || 0);
-    conv.lastKnown = Math.max(conv.lastKnown || 0, localMax);
-
-    if (key !== activeKey) {
-      const base = conv.lastRead || 0;
-      const diff = (conv.lastKnown || 0) - base;
-      conv.unread = diff > 0 ? diff : 0;
-    } else {
-      conv.lastRead = conv.lastKnown;
-      conv.unread = 0;
-    }
-  }
-
-  renderChatList();
-
-  // 3) если активный чат открыт — обновим сообщения, чтобы "живьём" появлялись
-  if (activeKey) {
-    await loadMessagesForActive();
-  }
-}
-
-// ===== actions =====
-
-async function setActiveConversation(key) {
-  await ensureLogin();
-  activeKey = key;
-
-  const conv = conversations[key];
-  if (!conv) return;
-
-  if (conv.type === 'group') {
-    chatTitle.textContent = conv.title;
-    chatSubtitle.textContent = 'Групповая беседа';
-    idsInfo.textContent = 'Ты: ' + selfID + ' · group_id: ' + conv.groupID;
-  } else {
-    chatTitle.textContent = 'Диалог с ' + conv.title;
-    chatSubtitle.textContent = 'Личный чат';
-    idsInfo.textContent = 'Ты: ' + selfID + ' · peer: ' + conv.peerName;
-  }
-
-  msgInput.disabled = false;
-  sendBtn.disabled = false;
-  if (attachBtn) attachBtn.disabled = false;
-
-  await loadMessagesForActive();
-  renderChatList();
-}
-
-// ===== send message =====
+// ===== отправка сообщения =====
 
 async function sendMessage() {
   const text = msgInput.value.trim();
@@ -582,10 +443,9 @@ async function openDirectChat() {
       peerName: peerName,
       peerID: null,
       lastKnown: 0,
-      lastRead: 0,
+      lastRead: loadConvLastRead(key),
       unread: 0
     };
-    saveDirectToStorage();
   }
   renderChatList();
   await setActiveConversation(key);
@@ -609,11 +469,32 @@ async function createGroup() {
     title: resp.name || name,
     groupID: gid,
     lastKnown: 0,
-    lastRead: 0,
+    lastRead: loadConvLastRead(key),
     unread: 0
   };
+
   renderChatList();
   await setActiveConversation(key);
+}
+
+// ===== add member to group =====
+
+async function addMemberToActiveGroup() {
+  await ensureLogin();
+  if (!activeKey) return;
+  const conv = conversations[activeKey];
+  if (!conv || conv.type !== 'group') return;
+
+  const username = prompt('Кого добавить? (username):', 'bob');
+  if (!username) return;
+  const u = username.trim();
+  if (!u) return;
+
+  const pk = await apiJSON('/public_key?username=' + encodeURIComponent(u), 'GET');
+  const uid = pk.id;
+
+  await apiJSON('/groups/add_member', 'POST', { group_id: conv.groupID, user_id: uid });
+  setStatus('Добавлен: ' + u + ' в "' + conv.title + '"', true);
 }
 
 // ===== attach photo =====
@@ -674,14 +555,9 @@ async function uploadSelectedImage() {
 
 // ===== events =====
 
-if (logoutLink) {
-  logoutLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    clearSessionCreds();
-    // не чистим localStorage полностью — только direct для этого юзера останется, но в другом аккаунте оно не видно
-    window.location.href = '/login.html';
-  });
-}
+loginBtn.addEventListener('click', () => {
+  ensureLogin().catch(err => setStatus('Ошибка логина: ' + err.message, false));
+});
 
 sendBtn.addEventListener('click', () => {
   sendMessage().catch(err => setStatus('Ошибка отправки: ' + err.message, false));
@@ -702,20 +578,8 @@ createGroupBtn.addEventListener('click', () => {
   createGroup().catch(err => setStatus('Ошибка беседы: ' + err.message, false));
 });
 
-if (onlineRefreshBtn) {
-  onlineRefreshBtn.addEventListener('click', () => {
-    ensureLogin().then(refreshOnlineOnce).catch(err => setStatus(err.message, false));
+if (addMemberBtn) {
+  addMemberBtn.addEventListener('click', () => {
+    addMemberToActiveGroup().catch(err => setStatus('Ошибка добавления: ' + err.message, false));
   });
 }
-if (chatsRefreshBtn) {
-  chatsRefreshBtn.addEventListener('click', () => {
-    ensureLogin().then(async () => {
-      await loadGroups();
-      renderChatList();
-      setStatus('Синхронизировано', true);
-    }).catch(err => setStatus(err.message, false));
-  });
-}
-
-// ===== boot =====
-ensureLogin().catch(err => setStatus('Ошибка: ' + err.message, false));

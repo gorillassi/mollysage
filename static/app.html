@@ -481,11 +481,25 @@
       <div class="header">
         <div class="header-main">
           <div id="chatTitle">Чат не выбран</div>
-          <div id="chatSubtitle">Создай диалог или беседу слева, затем выбери чат</div>
+          <div id="chatSubtitle">
+            Создай диалог или беседу слева, затем выбери чат
+          </div>
         </div>
-        <div id="idsInfo"></div>
-      </div>
 
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button
+            id="addMemberBtn"
+            class="attach-btn"
+            type="button"
+            title="Добавить участника"
+            style="display:none;"
+          >
+            ➕
+          </button>
+
+          <div id="idsInfo"></div>
+        </div>
+      </div>
       <div id="messages" class="messages"></div>
 
       <div class="input-area">
