@@ -7,7 +7,13 @@ let pollTimer = null;
 
 const chatListEl = document.getElementById('chatList');
 const sideStatus = document.getElementById('sideStatus');
+
 const meLabel = document.getElementById('meLabel');
+const logoutBtn = document.getElementById('logoutBtn');
+
+const peerSearch = document.getElementById('peerSearch');
+const peerOpenBtn = document.getElementById('peerOpenBtn');
+
 const chatTitle = document.getElementById('chatTitle');
 const chatSubtitle = document.getElementById('chatSubtitle');
 const idsInfo = document.getElementById('idsInfo');
@@ -19,19 +25,13 @@ const fileInput = document.getElementById('fileInput');
 
 const openDirectBtn = document.getElementById('openDirectBtn');
 const createGroupBtn = document.getElementById('createGroupBtn');
-const loginBtn = document.getElementById('loginBtn'); // может быть, если оставишь кнопку
 
 function setStatus(text, ok) {
-  if (!sideStatus) return;
   sideStatus.textContent = text || '';
   sideStatus.className = 'status';
   if (!text) return;
   if (ok) sideStatus.classList.add('ok');
   else sideStatus.classList.add('error');
-}
-
-function redirectToLogin() {
-  window.location.href = '/login.html';
 }
 
 async function apiJSON(url, method, body) {
@@ -51,8 +51,12 @@ async function apiJSON(url, method, body) {
   return await resp.text();
 }
 
+function redirectToLogin() {
+  window.location.href = '/login.html';
+}
+
 // ===== auth =====
-// БОЛЬШЕ НИКАКИХ username+"pass". Берём креды из sessionStorage, которые кладёт login.html  [oai_citation:1‡login.html](sediment://file_00000000ded8720c88c68e01058c3cd1)
+
 async function ensureLogin() {
   if (selfID) return;
 
@@ -72,8 +76,7 @@ async function ensureLogin() {
   try {
     const login = await apiJSON('/login', 'POST', { username: u, password: p });
     selfID = login.id;
-  } catch (e) {
-    // сессия битая/пароль неверный -> чистим и обратно на логин
+  } catch (_) {
     try {
       sessionStorage.removeItem('ss_username');
       sessionStorage.removeItem('ss_password');
@@ -102,7 +105,6 @@ function avatarLetter(title) {
 }
 
 function renderChatList() {
-  if (!chatListEl) return;
   chatListEl.innerHTML = '';
 
   const keys = Object.keys(conversations);
@@ -167,7 +169,6 @@ function renderMessageBody(container, text) {
 }
 
 function renderMessages(msgs) {
-  if (!messagesEl) return 0;
   messagesEl.innerHTML = '';
   if (!Array.isArray(msgs)) return 0;
 
@@ -221,12 +222,11 @@ async function loadGroups() {
 }
 
 async function refreshUnreadForOthers() {
-  // ВАЖНО: тут нельзя затирать messagesEl через renderMessages([])
   const keys = Object.keys(conversations);
   for (const key of keys) {
     const conv = conversations[key];
-
     let msgs = [];
+
     if (conv.type === 'group') {
       msgs = await apiJSON('/groups/messages?group_id=' + encodeURIComponent(conv.groupID), 'GET');
     } else {
@@ -347,6 +347,27 @@ async function setActiveConversation(key) {
   startPolling();
 }
 
+async function openDirectChatByName(peerName) {
+  await ensureLogin();
+  const name = (peerName || '').trim();
+  if (!name) return;
+
+  const key = convKeyUser(name);
+  if (!conversations[key]) {
+    conversations[key] = {
+      type: 'user',
+      title: name,
+      peerName: name,
+      peerID: null,
+      lastKnown: 0,
+      lastRead: 0,
+      unread: 0
+    };
+  }
+  renderChatList();
+  await setActiveConversation(key);
+}
+
 // ===== отправка сообщения =====
 
 async function sendMessage() {
@@ -362,7 +383,7 @@ async function sendMessage() {
       from_user_id: selfID,
       text: text
     });
-  } else if (conv.type === 'user') {
+  } else {
     if (!conv.peerID) {
       const data = await apiJSON('/public_key?username=' + encodeURIComponent(conv.peerName), 'GET');
       conv.peerID = data.id;
@@ -379,37 +400,22 @@ async function sendMessage() {
 }
 
 async function openDirectChat() {
-  await ensureLogin();
   const peer = prompt('Username собеседника (например: bob):', 'bob');
   if (!peer) return;
-  const peerName = peer.trim();
-  if (!peerName) return;
-
-  const key = convKeyUser(peerName);
-  if (!conversations[key]) {
-    conversations[key] = {
-      type: 'user',
-      title: peerName,
-      peerName: peerName,
-      peerID: null,
-      lastKnown: 0,
-      lastRead: 0,
-      unread: 0
-    };
-  }
-  renderChatList();
-  await setActiveConversation(key);
+  await openDirectChatByName(peer);
 }
 
 async function createGroup() {
   await ensureLogin();
   const name = prompt('Название беседы:', 'My group');
   if (!name) return;
+
   const resp = await apiJSON('/groups/create', 'POST', {
     name: name,
     owner_id: selfID,
     member_ids: []
   });
+
   const gid = resp.id;
   const key = convKeyGroup(gid);
   conversations[key] = {
@@ -420,6 +426,7 @@ async function createGroup() {
     lastRead: 0,
     unread: 0
   };
+
   renderChatList();
   await setActiveConversation(key);
 }
@@ -467,6 +474,7 @@ async function uploadSelectedImage() {
     const t = await resp.text().catch(() => '');
     throw new Error('upload failed: ' + resp.status + ' ' + t);
   }
+
   const data = await resp.json();
   const tag = `[[img:${data.id}]]`;
 
@@ -482,10 +490,13 @@ async function uploadSelectedImage() {
 
 // ===== events =====
 
-if (loginBtn) {
-  loginBtn.addEventListener('click', () => {
-    // не делаем “логин” внутри app — кидаем на /login.html
-    redirectToLogin('login_button');
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', () => {
+    try {
+      sessionStorage.removeItem('ss_username');
+      sessionStorage.removeItem('ss_password');
+    } catch (_) {}
+    redirectToLogin();
   });
 }
 
@@ -508,13 +519,15 @@ createGroupBtn.addEventListener('click', () => {
   createGroup().catch(err => setStatus('Ошибка беседы: ' + err.message, false));
 });
 
-if (logoutBtn) {
-  logoutBtn.addEventListener('click', () => {
-    try {
-      sessionStorage.removeItem('ss_username');
-      sessionStorage.removeItem('ss_password');
-    } catch (_) {}
-    redirectToLogin();
+if (peerOpenBtn && peerSearch) {
+  peerOpenBtn.addEventListener('click', () => {
+    openDirectChatByName(peerSearch.value).catch(err => setStatus(err.message, false));
+  });
+  peerSearch.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      peerOpenBtn.click();
+    }
   });
 }
 
