@@ -5,6 +5,7 @@ const conversations = {}; // key -> {type, title, peerName, peerID, groupID, las
 let activeKey = null;
 let pollTimer = null;
 let presenceTimer = null;
+let onlineRefreshTimer = null;
 
 const chatListEl = document.getElementById('chatList');
 const sideStatus = document.getElementById('sideStatus');
@@ -25,8 +26,15 @@ const openDirectBtn = document.getElementById('openDirectBtn');
 const createGroupBtn = document.getElementById('createGroupBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const refreshBtn = document.getElementById('refreshBtn');
+const onlineBtn = document.getElementById('onlineBtn');
 
 const meLine = document.getElementById('meLine');
+
+// online modal
+const onlineBackdrop = document.getElementById('onlineModalBackdrop');
+const onlineCloseBtn = document.getElementById('onlineCloseBtn');
+const onlineListEl = document.getElementById('onlineList');
+const onlineCountEl = document.getElementById('onlineCount');
 
 function setStatus(text, ok) {
   sideStatus.textContent = text || '';
@@ -83,7 +91,7 @@ async function ensureLogin() {
   meLine.textContent = 'Ты: ' + selfUser + ' · id=' + selfID;
   setStatus('Ок: ' + selfUser + ' (id=' + selfID + ')', true);
 
-  // важное: чистим локальные чаты при смене пользователя в этой вкладке
+  // чистим локальные чаты при смене пользователя в этой вкладке
   Object.keys(conversations).forEach(k => delete conversations[k]);
   activeKey = null;
 
@@ -91,10 +99,7 @@ async function ensureLogin() {
   await loadInbox();
   renderChatList();
 
-  // unread стартово = 0, а дальше по polling
-  Object.keys(conversations).forEach(k => {
-    conversations[k].unread = 0;
-  });
+  Object.keys(conversations).forEach(k => conversations[k].unread = 0);
 
   startPolling();
   startPresence();
@@ -229,14 +234,12 @@ async function loadGroups() {
   }
 }
 
-// подтягиваем диалоги, даже если юзер их никогда “не открывал”
 async function loadInbox() {
   if (!selfID) return;
   let list = [];
   try {
     list = await apiJSON('/chat/inbox?user_id=' + encodeURIComponent(selfID), 'GET');
   } catch (_) {
-    // если нет этого эндпоинта — просто молча
     return;
   }
   if (!Array.isArray(list)) return;
@@ -280,10 +283,8 @@ async function loadMessagesForActive() {
   const maxID = renderMessages(msgs);
   conv.lastKnown = Math.max(conv.lastKnown || 0, maxID);
 
-  // при открытом чате — всё “прочитано”
   conv.lastRead = conv.lastKnown;
   conv.unread = 0;
-
   renderChatList();
 }
 
@@ -306,7 +307,6 @@ function startPolling() {
 async function pollOnce() {
   if (!selfID) return;
 
-  // обновим inbox (вдруг новый диалог появился)
   await loadInbox();
   await loadGroups();
 
@@ -327,7 +327,6 @@ async function pollOnce() {
 
     let localMax = 0;
     for (const m of (msgs || [])) localMax = Math.max(localMax, m.id || 0);
-
     conv.lastKnown = Math.max(conv.lastKnown || 0, localMax);
 
     if (key !== activeKey) {
@@ -353,7 +352,6 @@ function stopPresence() {
 
 function startPresence() {
   stopPresence();
-  // пинг раз в 5 секунд (окно на сервере 15)
   presenceTimer = setInterval(() => {
     presencePing().catch(() => {});
   }, 5000);
@@ -362,10 +360,124 @@ function startPresence() {
 
 async function presencePing() {
   if (!selfID) return;
-  // если этого эндпоинта нет — просто не мешаем
   try {
     await apiJSON('/presence/ping', 'POST', { user_id: selfID });
   } catch (_) {}
+}
+
+// ===== online modal =====
+
+function openOnlineModal() {
+  onlineBackdrop.classList.add('open');
+  refreshOnlineList().catch(() => {});
+  startOnlineAutoRefresh();
+}
+
+function closeOnlineModal() {
+  onlineBackdrop.classList.remove('open');
+  stopOnlineAutoRefresh();
+}
+
+function stopOnlineAutoRefresh() {
+  if (onlineRefreshTimer) {
+    clearInterval(onlineRefreshTimer);
+    onlineRefreshTimer = null;
+  }
+}
+
+function startOnlineAutoRefresh() {
+  stopOnlineAutoRefresh();
+  onlineRefreshTimer = setInterval(() => {
+    refreshOnlineList().catch(() => {});
+  }, 3000);
+}
+
+async function refreshOnlineList() {
+  let list = [];
+  try {
+    list = await apiJSON('/presence/online', 'GET');
+  } catch (e) {
+    onlineListEl.innerHTML = '<div style="color:#9ca3af; font-size:12px; padding:10px;">Нет данных (эндпоинт /presence/online не работает)</div>';
+    onlineCountEl.textContent = '0';
+    return;
+  }
+
+  if (!Array.isArray(list)) list = [];
+  // не показываем себя
+  list = list.filter(u => (u && u.id) ? (u.id !== selfID) : true);
+
+  onlineCountEl.textContent = String(list.length);
+  onlineListEl.innerHTML = '';
+
+  if (list.length === 0) {
+    onlineListEl.innerHTML = '<div style="color:#9ca3af; font-size:12px; padding:10px;">Никого нет онлайн</div>';
+    return;
+  }
+
+  for (const u of list) {
+    const item = document.createElement('div');
+    item.className = 'online-item';
+
+    const left = document.createElement('div');
+    left.className = 'online-left';
+
+    const av = document.createElement('div');
+    av.className = 'chat-avatar';
+    av.textContent = avatarLetter(u.username || '?');
+
+    const t = document.createElement('div');
+    t.style.minWidth = '0';
+
+    const nm = document.createElement('div');
+    nm.className = 'online-name';
+    nm.textContent = u.username || ('user#' + u.id);
+
+    const sub = document.createElement('div');
+    sub.className = 'online-sub';
+    sub.textContent = 'id: ' + (u.id || '?');
+
+    t.appendChild(nm);
+    t.appendChild(sub);
+
+    left.appendChild(av);
+    left.appendChild(t);
+
+    item.appendChild(left);
+
+    item.addEventListener('click', async () => {
+      // открыть диалог по клику
+      const peerName = (u.username || '').trim();
+      if (!peerName) return;
+      closeOnlineModal();
+      await openDirectByUsername(peerName);
+    });
+
+    onlineListEl.appendChild(item);
+  }
+}
+
+async function openDirectByUsername(peerName) {
+  await ensureLogin();
+
+  const data = await apiJSON('/public_key?username=' + encodeURIComponent(peerName), 'GET');
+  const key = convKeyUser(peerName);
+
+  if (!conversations[key]) {
+    conversations[key] = {
+      type: 'user',
+      title: peerName,
+      peerName: peerName,
+      peerID: data.id,
+      lastKnown: 0,
+      lastRead: 0,
+      unread: 0
+    };
+  } else {
+    conversations[key].peerID = conversations[key].peerID || data.id;
+  }
+
+  renderChatList();
+  await setActiveConversation(key);
 }
 
 // ===== actions =====
@@ -395,8 +507,6 @@ async function setActiveConversation(key) {
   await loadMessagesForActive();
   startPolling();
 }
-
-// ===== отправка сообщения =====
 
 async function sendMessage() {
   const text = msgInput.value.trim();
@@ -433,26 +543,7 @@ async function openDirectChat() {
   if (!peer) return;
   const peerName = peer.trim();
   if (!peerName) return;
-
-  // проверим что такой юзер есть
-  const data = await apiJSON('/public_key?username=' + encodeURIComponent(peerName), 'GET');
-
-  const key = convKeyUser(peerName);
-  if (!conversations[key]) {
-    conversations[key] = {
-      type: 'user',
-      title: peerName,
-      peerName: peerName,
-      peerID: data.id,
-      lastKnown: 0,
-      lastRead: 0,
-      unread: 0
-    };
-  } else {
-    conversations[key].peerID = conversations[key].peerID || data.id;
-  }
-  renderChatList();
-  await setActiveConversation(key);
+  await openDirectByUsername(peerName);
 }
 
 async function createGroup() {
@@ -463,7 +554,7 @@ async function createGroup() {
   const resp = await apiJSON('/groups/create', 'POST', {
     name: name,
     owner_id: selfID,
-    member_ids: [] // добавление людей отдельной кнопкой
+    member_ids: []
   });
 
   const gid = resp.id;
@@ -596,6 +687,23 @@ refreshBtn.addEventListener('click', () => {
     renderChatList();
     if (activeKey) await loadMessagesForActive();
   })().catch(err => setStatus('Ошибка обновления: ' + err.message, false));
+});
+
+// online modal events
+onlineBtn.addEventListener('click', () => {
+  openOnlineModal();
+});
+
+onlineCloseBtn.addEventListener('click', () => {
+  closeOnlineModal();
+});
+
+onlineBackdrop.addEventListener('click', (e) => {
+  if (e.target === onlineBackdrop) closeOnlineModal();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && onlineBackdrop.classList.contains('open')) closeOnlineModal();
 });
 
 // ===== boot =====

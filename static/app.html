@@ -245,9 +245,7 @@
       justify-content: space-between;
     }
 
-    .header-main {
-      min-width: 0;
-    }
+    .header-main { min-width: 0; }
 
     #chatTitle {
       font-weight: 900;
@@ -381,9 +379,7 @@
       box-shadow: none;
     }
 
-    .input-area button:hover:enabled {
-      transform: translateY(-1px);
-    }
+    .input-area button:hover:enabled { transform: translateY(-1px); }
 
     .input-area .attach-btn {
       width: 44px;
@@ -406,8 +402,102 @@
       transform: translateY(-1px);
     }
 
-    .input-area .send-btn {
-      width: 110px;
+    .input-area .send-btn { width: 110px; }
+
+    /* ===== Online modal ===== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 50;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: min(520px, 92vw);
+      border-radius: 18px;
+      border: 1px solid rgba(148,163,184,0.18);
+      background: rgba(2,6,23,0.85);
+      box-shadow: 0 26px 70px rgba(0,0,0,0.55);
+      overflow: hidden;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 14px;
+      border-bottom: 1px solid rgba(148,163,184,0.14);
+      background: rgba(2,6,23,0.65);
+    }
+    .modal-title {
+      font-weight: 900;
+      font-size: 13px;
+      color: rgba(229,231,235,0.95);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.18);
+      color: rgba(229,231,235,0.75);
+      background: rgba(2,6,23,0.45);
+    }
+    .modal-close {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(2, 6, 23, 0.55);
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 800;
+      border-radius: 12px;
+      padding: 8px 10px;
+    }
+    .modal-body {
+      padding: 10px 10px 14px;
+      max-height: min(60vh, 520px);
+      overflow: auto;
+    }
+    .online-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 10px;
+      margin: 8px 4px;
+      border-radius: 14px;
+      border: 1px solid rgba(148,163,184,0.14);
+      background: rgba(2,6,23,0.35);
+      cursor: pointer;
+      transition: transform .1s ease, border-color .15s ease, background .15s ease;
+    }
+    .online-item:hover {
+      border-color: rgba(59,130,246,0.45);
+      background: rgba(37,99,235,0.10);
+      transform: translateY(-1px);
+    }
+    .online-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .online-name {
+      font-weight: 900;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .online-sub {
+      font-size: 12px;
+      color: rgba(156,163,175,0.9);
     }
 
     @media (max-width: 980px) {
@@ -439,6 +529,7 @@
         </div>
 
         <div class="row" style="justify-content: space-between;">
+          <button id="onlineBtn" title="Показать онлайн">Online</button>
           <button id="logoutBtn" title="Выйти">Выйти</button>
           <button id="refreshBtn" title="Обновить">Обновить</button>
         </div>
@@ -474,6 +565,22 @@
         <button id="attachBtn" class="attach-btn" type="button" disabled title="Прикрепить фото">📎</button>
         <textarea id="msgInput" placeholder="Напиши сообщение…" disabled></textarea>
         <button id="sendBtn" class="send-btn" disabled>Отправить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Online modal -->
+  <div id="onlineModalBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <div class="modal-title">
+          <span>Пользователи онлайн</span>
+          <span id="onlineCount" class="pill">0</span>
+        </div>
+        <button id="onlineCloseBtn" class="modal-close" type="button">Закрыть</button>
+      </div>
+      <div class="modal-body">
+        <div id="onlineList"></div>
       </div>
     </div>
   </div>
