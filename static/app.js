@@ -7,7 +7,7 @@ let pollTimer = null;
 
 const chatListEl = document.getElementById('chatList');
 const sideStatus = document.getElementById('sideStatus');
-const selfUserInput = document.getElementById('selfUser');
+const selfUserInput = document.getElementById('selfUser'); // может быть, если оставишь поле
 const chatTitle = document.getElementById('chatTitle');
 const chatSubtitle = document.getElementById('chatSubtitle');
 const idsInfo = document.getElementById('idsInfo');
@@ -19,14 +19,22 @@ const fileInput = document.getElementById('fileInput');
 
 const openDirectBtn = document.getElementById('openDirectBtn');
 const createGroupBtn = document.getElementById('createGroupBtn');
-const loginBtn = document.getElementById('loginBtn');
+const loginBtn = document.getElementById('loginBtn'); // может быть, если оставишь кнопку
 
 function setStatus(text, ok) {
+  if (!sideStatus) return;
   sideStatus.textContent = text || '';
   sideStatus.className = 'status';
   if (!text) return;
   if (ok) sideStatus.classList.add('ok');
   else sideStatus.classList.add('error');
+}
+
+function redirectToLogin(reason) {
+  try {
+    if (reason) sessionStorage.setItem('ss_login_reason', reason);
+  } catch (_) {}
+  window.location.href = '/login.html';
 }
 
 async function apiJSON(url, method, body) {
@@ -47,33 +55,53 @@ async function apiJSON(url, method, body) {
 }
 
 // ===== auth =====
-
+// БОЛЬШЕ НИКАКИХ username+"pass". Берём креды из sessionStorage, которые кладёт login.html  [oai_citation:1‡login.html](sediment://file_00000000ded8720c88c68e01058c3cd1)
 async function ensureLogin() {
   if (selfID) return;
-  const u = (selfUserInput.value || '').trim();
-  if (!u) throw new Error('введи username');
-  selfUser = u;
 
-  // простая схема: пароль в этой демке = username + "pass" (alicepass/bobpass)
-  const pass = u + 'pass';
-
-  // регистрируем (если уже есть — ок)
+  let u = null, p = null;
   try {
-    await apiJSON('/register', 'POST', { username: u, password: pass });
+    u = sessionStorage.getItem('ss_username');
+    p = sessionStorage.getItem('ss_password');
   } catch (_) {}
 
-  const login = await apiJSON('/login', 'POST', { username: u, password: pass });
-  selfID = login.id;
+  // Если нет сессии — идём на /login.html (никаких попапов в app)
+  if (!u || !p) {
+    // fallback: если ты оставил поле selfUser в app.html, можно дать “быстрый вход”
+    const typed = (selfUserInput && selfUserInput.value ? selfUserInput.value : '').trim();
+    if (typed) {
+      setStatus('Нет сессии. Открой /login.html и войди нормальным паролем.', false);
+      redirectToLogin('no_session');
+      return;
+    }
+    redirectToLogin('no_session');
+    return;
+  }
 
-  setStatus('Ок: ' + u + ' (id=' + selfID + ')', true);
+  selfUser = u;
+
+  // ВАЖНО: регистрация в app.js не нужна. Регистрация — через register.html  [oai_citation:2‡register.html](sediment://file_00000000a2f071f58781320e34efa80f)
+  try {
+    const login = await apiJSON('/login', 'POST', { username: u, password: p });
+    selfID = login.id;
+  } catch (e) {
+    // 401 или любая ошибка => чистим сессию и возвращаем на /login.html
+    try {
+      sessionStorage.removeItem('ss_username');
+      sessionStorage.removeItem('ss_password');
+    } catch (_) {}
+    setStatus('Сессия протухла или пароль неверный. Войди заново.', false);
+    redirectToLogin('bad_session');
+    return;
+  }
+
+  setStatus('Ок: ' + selfUser + ' (id=' + selfID + ')', true);
 
   await loadGroups();
   renderChatList();
 
-  // начальный прогон: узнать lastKnown/lastRead и НЕ считать историю непрочитанной
-  try {
-    await refreshUnreadForOthers();
-  } catch (_) {}
+  // начальный прогон: НЕ считать старую историю непрочитанной
+  try { await refreshUnreadForOthers(); } catch (_) {}
 }
 
 // ===== UI helpers =====
@@ -87,6 +115,7 @@ function avatarLetter(title) {
 }
 
 function renderChatList() {
+  if (!chatListEl) return;
   chatListEl.innerHTML = '';
 
   const keys = Object.keys(conversations);
@@ -151,14 +180,14 @@ function renderMessageBody(container, text) {
 }
 
 function renderMessages(msgs) {
+  if (!messagesEl) return 0;
   messagesEl.innerHTML = '';
   if (!Array.isArray(msgs)) return 0;
 
   let maxID = 0;
   for (const m of msgs) {
-    if (typeof m.id === 'number' && m.id > maxID) {
-      maxID = m.id;
-    }
+    if (typeof m.id === 'number' && m.id > maxID) maxID = m.id;
+
     const wrapper = document.createElement('div');
     const meta = document.createElement('div');
     const body = document.createElement('div');
@@ -205,10 +234,11 @@ async function loadGroups() {
 }
 
 async function refreshUnreadForOthers() {
-  // берём последние сообщения по всем чатам, но историю не считаем непрочитанной сразу
+  // ВАЖНО: тут нельзя затирать messagesEl через renderMessages([])
   const keys = Object.keys(conversations);
   for (const key of keys) {
     const conv = conversations[key];
+
     let msgs = [];
     if (conv.type === 'group') {
       msgs = await apiJSON('/groups/messages?group_id=' + encodeURIComponent(conv.groupID), 'GET');
@@ -219,9 +249,10 @@ async function refreshUnreadForOthers() {
       }
       msgs = await apiJSON('/chat/messages?user_a=' + encodeURIComponent(selfID) + '&user_b=' + encodeURIComponent(conv.peerID), 'GET');
     }
-    const maxID = renderMessages([]) || 0; // не рисуем тут
+
     let localMax = 0;
     for (const m of (msgs || [])) localMax = Math.max(localMax, m.id || 0);
+
     conv.lastKnown = localMax;
     conv.lastRead = localMax;
     conv.unread = 0;
@@ -247,7 +278,6 @@ async function loadMessagesForActive() {
   const maxID = renderMessages(msgs);
   conv.lastKnown = Math.max(conv.lastKnown || 0, maxID);
 
-  // при открытом чате считаем всё прочитанным
   conv.lastRead = conv.lastKnown;
   conv.unread = 0;
   renderChatList();
@@ -453,7 +483,6 @@ async function uploadSelectedImage() {
   const data = await resp.json();
   const tag = `[[img:${data.id}]]`;
 
-  // отправляем тэг как обычное сообщение
   if (conv.type === 'group') {
     await apiJSON('/groups/send', 'POST', { group_id: conv.groupID, from_user_id: selfID, text: tag });
   } else {
@@ -466,9 +495,12 @@ async function uploadSelectedImage() {
 
 // ===== events =====
 
-loginBtn.addEventListener('click', () => {
-  ensureLogin().catch(err => setStatus('Ошибка логина: ' + err.message, false));
-});
+if (loginBtn) {
+  loginBtn.addEventListener('click', () => {
+    // не делаем “логин” внутри app — кидаем на /login.html
+    redirectToLogin('login_button');
+  });
+}
 
 sendBtn.addEventListener('click', () => {
   sendMessage().catch(err => setStatus('Ошибка отправки: ' + err.message, false));
@@ -487,4 +519,8 @@ openDirectBtn.addEventListener('click', () => {
 
 createGroupBtn.addEventListener('click', () => {
   createGroup().catch(err => setStatus('Ошибка беседы: ' + err.message, false));
+});
+
+ensureLogin().catch(() => {
+  // ensureLogin сам редиректит при проблемах
 });
