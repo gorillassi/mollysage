@@ -26,7 +26,7 @@ type Server struct {
 
 func NewServer(db *sql.DB) *Server {
 	return &Server{
-		users:         NewUserStore(),
+		users:         NewUserStore(db),
 		messages:      NewMessageStore(db),
 		plainMessages: NewPlainMessageStore(db),
 		groups:        NewGroupStore(db),
@@ -37,7 +37,6 @@ func NewServer(db *sql.DB) *Server {
 		plainMediaKey: mustLoadOrCreateServerKey("server_media_key.bin"),
 	}
 }
-
 
 type RegisterRequest struct {
 	Username string `json:"username"`
@@ -845,4 +844,98 @@ func (s *Server) handlePlainMediaGet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", m.ContentType)
 	w.Header().Set("Content-Disposition", `inline; filename="`+m.OriginalName+`"`)
 	_, _ = w.Write(raw)
+}
+
+type InboxDTO struct {
+	PeerID        int64  `json:"peer_id"`
+	PeerUsername  string `json:"peer_username"`
+	LastMessageID int64  `json:"last_message_id"`
+	LastText      string `json:"last_text"`
+	LastCreatedAt string `json:"last_created_at"`
+}
+
+func (s *Server) handleChatInbox(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userStr := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	if userStr == "" {
+		http.Error(w, "user_id required", http.StatusBadRequest)
+		return
+	}
+	var uid int64
+	if _, err := fmt.Sscan(userStr, &uid); err != nil || uid <= 0 {
+		http.Error(w, "bad user_id", http.StatusBadRequest)
+		return
+	}
+
+	// (опционально) проверим что юзер существует
+	if _, err := s.users.GetByID(uid); err != nil {
+		http.Error(w, "user not found", http.StatusBadRequest)
+		return
+	}
+
+	items, err := s.plainMessages.ListInbox(uid)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	out := make([]InboxDTO, 0, len(items))
+	for _, it := range items {
+		out = append(out, InboxDTO{
+			PeerID:        it.PeerID,
+			PeerUsername:  it.PeerUsername,
+			LastMessageID: it.LastMessageID,
+			LastText:      it.LastText,
+			LastCreatedAt: it.LastCreatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// пример: 15 секунд считаем online
+const onlineWindowSec = 15
+
+func (s *Server) handlePresencePing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		UserID int64 `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.UserID <= 0 {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	_ = s.users.UpdateLastSeen(req.UserID)
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+func (s *Server) handlePresenceOnline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	users, err := s.users.ListOnline(onlineWindowSec)
+	if err != nil {
+		http.Error(w, "db", http.StatusInternalServerError)
+		return
+	}
+	type dto struct {
+		ID       int64  `json:"id"`
+		Username string `json:"username"`
+	}
+	out := make([]dto, 0, len(users))
+	for _, u := range users {
+		out = append(out, dto{ID: u.ID, Username: u.Username})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
 }

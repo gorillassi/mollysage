@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// ===== Пользователи — пока in-memory =====
+// ===== Пользователи — в SQLite (а не in-memory) =====
 
 type User struct {
 	ID                 int64
@@ -16,21 +16,16 @@ type User struct {
 	PublicKey          []byte
 	EncPrivateKey      []byte
 	EncPrivateKeyNonce []byte
+	LastSeen           sql.NullString
 }
 
 type UserStore struct {
-	mu     sync.RWMutex
-	byID   map[int64]*User
-	byName map[string]*User
-	nextID int64
+	mu sync.RWMutex
+	db *sql.DB
 }
 
-func NewUserStore() *UserStore {
-	return &UserStore{
-		byID:   make(map[int64]*User),
-		byName: make(map[string]*User),
-		nextID: 1,
-	}
+func NewUserStore(db *sql.DB) *UserStore {
+	return &UserStore{db: db}
 }
 
 var (
@@ -42,16 +37,30 @@ func (s *UserStore) CreateUser(u *User) (*User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.byName[u.Username]; ok {
+	// проверим уникальность
+	var exists int
+	err := s.db.QueryRow(`SELECT 1 FROM users WHERE username = ? LIMIT 1`, u.Username).Scan(&exists)
+	if err == nil {
 		return nil, ErrUserExists
 	}
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
 
-	u.ID = s.nextID
-	s.nextID++
-
-	s.byID[u.ID] = u
-	s.byName[u.Username] = u
-
+	res, err := s.db.Exec(`
+		INSERT INTO users (username, password_salt, password_hash, public_key, enc_private_key, enc_private_key_nonce)
+		VALUES (?,?,?,?,?,?)`,
+		u.Username, u.PasswordSalt, u.PasswordHash, u.PublicKey, u.EncPrivateKey, u.EncPrivateKeyNonce,
+	)
+	if err != nil {
+		// на всякий случай: если гонка — sqlite вернет constraint
+		if sqliteIsConstraint(err) {
+			return nil, ErrUserExists
+		}
+		return nil, err
+	}
+	id, _ := res.LastInsertId()
+	u.ID = id
 	return u, nil
 }
 
@@ -59,22 +68,97 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	u, ok := s.byName[username]
-	if !ok {
-		return nil, ErrUserNotFound
+	var u User
+	err := s.db.QueryRow(`
+		SELECT id, username, password_salt, password_hash, public_key, enc_private_key, enc_private_key_nonce, last_seen
+		FROM users WHERE username = ?`, username,
+	).Scan(
+		&u.ID, &u.Username, &u.PasswordSalt, &u.PasswordHash, &u.PublicKey, &u.EncPrivateKey, &u.EncPrivateKeyNonce, &u.LastSeen,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
 	}
-	return u, nil
+	return &u, nil
 }
 
 func (s *UserStore) GetByID(id int64) (*User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	u, ok := s.byID[id]
-	if !ok {
-		return nil, ErrUserNotFound
+	var u User
+	err := s.db.QueryRow(`
+		SELECT id, username, password_salt, password_hash, public_key, enc_private_key, enc_private_key_nonce, last_seen
+		FROM users WHERE id = ?`, id,
+	).Scan(
+		&u.ID, &u.Username, &u.PasswordSalt, &u.PasswordHash, &u.PublicKey, &u.EncPrivateKey, &u.EncPrivateKeyNonce, &u.LastSeen,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
 	}
-	return u, nil
+	return &u, nil
+}
+
+func (s *UserStore) UpdateLastSeen(userID int64) error {
+	_, err := s.db.Exec(`UPDATE users SET last_seen = datetime('now') WHERE id = ?`, userID)
+	return err
+}
+
+func (s *UserStore) ListOnline(seconds int) ([]User, error) {
+	q := `
+SELECT id, username, last_seen
+FROM users
+WHERE last_seen IS NOT NULL
+  AND (strftime('%s','now') - strftime('%s', last_seen)) <= ?
+ORDER BY username;
+`
+	rows, err := s.db.Query(q, seconds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.LastSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// очень простая проверка constraint для sqlite3
+func sqliteIsConstraint(err error) bool {
+	if err == nil {
+		return false
+	}
+	// не тащим sqlite3.Error типом — просто по строке
+	return containsAny(err.Error(), []string{"UNIQUE constraint failed", "constraint failed"})
+}
+
+func containsAny(s string, subs []string) bool {
+	for _, x := range subs {
+		if x != "" && (len(s) >= len(x)) && (indexOf(s, x) >= 0) {
+			return true
+		}
+	}
+	return false
+}
+func indexOf(s, sub string) int {
+	// минимальный index, чтобы не тащить strings (если хочешь — замени на strings.Contains)
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
 }
 
 // ===== Сообщения — в SQLite =====
@@ -121,7 +205,6 @@ func (s *MessageStore) ListBetween(userA, userB int64) []*Message {
 		userA, userB, userB, userA,
 	)
 	if err != nil {
-		// в боевом коде логируем, тут просто пустой список
 		return []*Message{}
 	}
 	defer rows.Close()
@@ -196,7 +279,55 @@ func (s *PlainMessageStore) ListBetween(userA, userB int64) ([]*PlainMessage, er
 	return res, nil
 }
 
-// ===== Groups (беседы) =====
+// ===== Inbox (для автопоявления диалогов) =====
+
+type InboxItem struct {
+	PeerID        int64
+	PeerUsername  string
+	LastMessageID int64
+	LastText      string
+	LastCreatedAt string
+}
+
+func (s *PlainMessageStore) ListInbox(userID int64) ([]InboxItem, error) {
+	const q = `
+WITH last_per_peer AS (
+  SELECT
+    CASE WHEN from_user_id = ? THEN to_user_id ELSE from_user_id END AS peer_id,
+    MAX(id) AS last_id
+  FROM plain_messages
+  WHERE from_user_id = ? OR to_user_id = ?
+  GROUP BY peer_id
+)
+SELECT
+  l.peer_id,
+  u.username,
+  pm.id,
+  pm.text,
+  pm.created_at
+FROM last_per_peer l
+JOIN users u ON u.id = l.peer_id
+JOIN plain_messages pm ON pm.id = l.last_id
+ORDER BY pm.id DESC;
+`
+	rows, err := s.db.Query(q, userID, userID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []InboxItem{}
+	for rows.Next() {
+		var it InboxItem
+		if err := rows.Scan(&it.PeerID, &it.PeerUsername, &it.LastMessageID, &it.LastText, &it.LastCreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// ===== Groups / Media — оставил как у тебя (ниже без изменений по логике) =====
 
 type Group struct {
 	ID          int64
@@ -244,7 +375,6 @@ func (s *GroupStore) GetByID(id int64) (*Group, error) {
 	return &g, nil
 }
 
-// Все группы, где user_id состоит в group_members
 func (s *GroupStore) ListByUser(userID int64) ([]*Group, error) {
 	rows, err := s.db.Query(
 		`SELECT g.id, g.name, g.owner_user_id, g.created_at
@@ -269,8 +399,6 @@ func (s *GroupStore) ListByUser(userID int64) ([]*Group, error) {
 	}
 	return res, nil
 }
-
-// ===== Участники бесед =====
 
 type GroupMemberStore struct {
 	db *sql.DB
@@ -303,8 +431,6 @@ func (s *GroupMemberStore) IsMember(groupID, userID int64) (bool, error) {
 	}
 	return true, nil
 }
-
-// ===== Сообщения в беседах =====
 
 type GroupMessage struct {
 	ID         int64

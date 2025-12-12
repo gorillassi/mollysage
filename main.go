@@ -15,6 +15,22 @@ func initDB(path string) (*sql.DB, error) {
 	}
 
 	schema := `
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+
+    password_salt BLOB NOT NULL,
+    password_hash BLOB NOT NULL,
+
+    public_key BLOB NOT NULL,
+    enc_private_key BLOB NOT NULL,
+    enc_private_key_nonce BLOB NOT NULL,
+
+    last_seen DATETIME
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_user_id INTEGER NOT NULL,
@@ -69,7 +85,6 @@ CREATE TABLE IF NOT EXISTS group_messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 `
-
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
@@ -94,6 +109,7 @@ func main() {
 
 	http.HandleFunc("/chat/send", s.handleChatSend)
 	http.HandleFunc("/chat/messages", s.handleChatMessages)
+	http.HandleFunc("/chat/inbox", s.handleChatInbox)
 
 	http.HandleFunc("/groups/create", s.handleCreateGroup)
 	http.HandleFunc("/groups/add_member", s.handleAddGroupMember)
@@ -104,7 +120,11 @@ func main() {
 	http.HandleFunc("/api/plain_media/upload", s.handlePlainMediaUpload)
 	http.HandleFunc("/api/plain_media/get", s.handlePlainMediaGet)
 
-	// Статика: / -> отдать файлы из папки static
+	// Presence (БЕЗ srv)
+	http.HandleFunc("/presence/ping", s.handlePresencePing)
+	http.HandleFunc("/presence/online", s.handlePresenceOnline)
+
+	// Статика
 	fs := http.FileServer(http.Dir("static"))
 	http.Handle("/", fs)
 
@@ -114,4 +134,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
