@@ -357,6 +357,9 @@ form.addEventListener('submit', async (e) => {
       localStorage.setItem('ss_username', username);
       sessionStorage.setItem('ss_username', username);
       sessionStorage.setItem('ss_password', password);
+
+      // optional: чтобы явно зафиксировать текущего юзера
+      localStorage.setItem('ss:last_user', username);
     } catch (_) {}
 
     window.location.href = '/app.html';
